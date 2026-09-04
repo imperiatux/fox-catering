@@ -1,5 +1,5 @@
-import type { DailyMenu, DailyOrders } from '../../src/types';
-import { menuKey, ordersKey } from './storage-keys';
+import type { DailyOrders } from '../../src/types';
+import { ordersKey, menuImageKey } from './storage-keys';
 
 const TTL_SECONDS = 259200; // 3 days
 
@@ -53,14 +53,6 @@ function getBackend(): KvBackend {
 // Public helpers
 // ---------------------------------------------------------------------------
 
-export async function getMenu(date: string): Promise<DailyMenu | null> {
-  return getBackend().get<DailyMenu>(menuKey(date));
-}
-
-export async function setMenu(date: string, menu: DailyMenu): Promise<void> {
-  await getBackend().set(menuKey(date), menu, TTL_SECONDS);
-}
-
 export async function getOrders(date: string): Promise<DailyOrders> {
   const stored = await getBackend().get<DailyOrders>(ordersKey(date));
   return stored ?? { date, orders: [] };
@@ -68,4 +60,12 @@ export async function getOrders(date: string): Promise<DailyOrders> {
 
 export async function setOrders(date: string, orders: DailyOrders): Promise<void> {
   await getBackend().set(ordersKey(date), orders, TTL_SECONDS);
+}
+
+export async function getMenuImage(date: string): Promise<string | null> {
+  return getBackend().get<string>(menuImageKey(date));
+}
+
+export async function setMenuImage(date: string, dataUrl: string): Promise<void> {
+  await getBackend().set(menuImageKey(date), dataUrl, TTL_SECONDS);
 }

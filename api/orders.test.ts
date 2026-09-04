@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import handler from './orders';
-import { getMenu, getOrders, setOrders } from './lib/kv';
+import { getOrders, setOrders } from './lib/kv';
 import { isCutoffPassed } from './lib/validation';
+import { MENU_OPTIONS } from '../src/types';
 
 vi.mock('./lib/kv', () => ({
-  getMenu: vi.fn(),
   getOrders: vi.fn(),
   setOrders: vi.fn(),
 }));
@@ -27,12 +27,6 @@ function mockRes() {
   return res as any;
 }
 
-const menu = {
-  date: '2025-07-14',
-  vegetarian: { main: 'Veg main', secondary: 'Veg side' },
-  nonVegetarian: { main: 'Meat main', secondary: 'Meat side' },
-};
-
 describe('orders API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,24 +46,23 @@ describe('orders API', () => {
     const res = mockRes();
 
     await handler(mockReq('POST', { date: '2025-07-14' }, {
-      nickname: '', main: 'Veg main', secondary: 'Veg side',
+      nickname: '', main: MENU_OPTIONS.vegMain, secondary: MENU_OPTIONS.vegSoup,
     }), res);
 
     expect(res.statusCode).toBe(400);
   });
 
   it('stores valid POST data and returns updated orders', async () => {
-    vi.mocked(getMenu).mockResolvedValue(menu);
     vi.mocked(getOrders).mockResolvedValue({ date: '2025-07-14', orders: [] });
     const res = mockRes();
 
     await handler(mockReq('POST', { date: '2025-07-14' }, {
-      nickname: ' Fox ', main: 'Veg main', secondary: 'Veg side',
+      nickname: ' Fox ', main: MENU_OPTIONS.vegMain, secondary: MENU_OPTIONS.vegSoup,
     }), res);
 
     const expected = {
       date: '2025-07-14',
-      orders: [{ nickname: 'fox', main: 'Veg main', secondary: 'Veg side' }],
+      orders: [{ nickname: 'Fox', main: MENU_OPTIONS.vegMain, secondary: MENU_OPTIONS.vegSoup }],
     };
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual(expected);
@@ -89,8 +82,8 @@ describe('orders API', () => {
     vi.mocked(getOrders).mockResolvedValue({
       date: '2025-07-14',
       orders: [
-        { nickname: 'fox', main: 'Veg main', secondary: 'Veg side' },
-        { nickname: 'wolf', main: 'Meat main', secondary: 'Meat side' },
+        { nickname: 'Fox',  main: MENU_OPTIONS.vegMain,    secondary: MENU_OPTIONS.vegSoup },
+        { nickname: 'wolf', main: MENU_OPTIONS.nonVegMain, secondary: MENU_OPTIONS.nonVegSoup },
       ],
     });
     const res = mockRes();
@@ -99,7 +92,7 @@ describe('orders API', () => {
 
     const expected = {
       date: '2025-07-14',
-      orders: [{ nickname: 'wolf', main: 'Meat main', secondary: 'Meat side' }],
+      orders: [{ nickname: 'wolf', main: MENU_OPTIONS.nonVegMain, secondary: MENU_OPTIONS.nonVegSoup }],
     };
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual(expected);

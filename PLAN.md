@@ -149,3 +149,27 @@ These features were added after the original five sub-tasks were complete.
 - `openai` dependency removed; no external API calls for OCR
 - `AdminDashboardPage` — "Upload menu image" button pre-fills the four form fields; organizer reviews and corrects before saving
 - `OCR_URL` wired in `docker-compose.yml` (`http://ocr:8884`); `ocr` service health-checked before `app` starts
+
+#### 6e. Nickname casing preservation
+
+**Status:** [x] complete
+
+- `normalizeNickname` in `api/lib/validation.ts` changed from `.trim().toLowerCase()` to `.trim()` — nicknames are now stored and matched with their original casing
+- `OrderPage.tsx` displays the stored nickname as-is (no client-side transform)
+
+---
+
+#### 6f. Categorised orders summary in admin dashboard
+
+**Status:** [x] complete
+
+**Delivered:**
+- `AdminDashboardPage.tsx` — `OrdersTab` now fetches `/api/admin/orders` and `/api/admin/menu` in parallel
+- `buildSummary()` replaced by `categoriseOrders(orders, menu)` which classifies each order into:
+  - **Non-vegetarian** — main and secondary both match the non-veg variant exactly
+  - **Vegetarian** — main and secondary both match the veg variant exactly
+  - **Custom** — any other combination (mix of variants, or no menu available)
+- Summary card shows three bold counts (Non-vegetarian / Vegetarian / Custom) above the per-nickname table
+- Orders table gains a **Type** column (Non-veg / Veg / Custom) per row
+- `src/index.css` — `.admin-summary-counts` layout for the three-count summary card
+- `api/lib/validation.test.ts` and `api/orders.test.ts` — updated to expect trim-only (casing-preserved) nicknames; all 24 tests pass

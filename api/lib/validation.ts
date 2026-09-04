@@ -5,7 +5,7 @@ const MAX_FIELD = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function normalizeNickname(raw: string): string {
-  return raw.trim().toLowerCase().slice(0, MAX_NICKNAME);
+  return raw.trim().slice(0, MAX_NICKNAME);
 }
 
 export function validateNickname(nickname: string): string | null {

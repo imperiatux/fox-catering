@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMenu } from './lib/kv';
+import { getMenuImage } from './lib/kv';
 import { validateDate } from './lib/validation';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const date = req.query.date as string | undefined;
+  const date = typeof req.query.date === 'string' ? req.query.date : '';
   if (!date) {
     return res.status(400).json({ error: 'Missing required query param: date' });
   }
@@ -17,10 +17,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: dateError });
   }
 
-  const menu = await getMenu(date);
-  if (!menu) {
-    return res.status(404).json({ error: 'No menu for this date' });
+  const dataUrl = await getMenuImage(date);
+  if (!dataUrl) {
+    return res.status(404).json({ error: 'No menu image for this date' });
   }
 
-  return res.status(200).json(menu);
+  return res.status(200).json({ dataUrl });
 }

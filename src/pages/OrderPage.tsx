@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useMenu } from '../hooks/useMenu';
+import { useMenuImage } from '../hooks/useMenuImage';
 import { useOrders } from '../hooks/useOrders';
 import { useConfig } from '../hooks/useConfig';
 import {
@@ -9,7 +9,8 @@ import {
   minutesUntilCutoff,
   formatDateDisplay,
 } from '../utils/date';
-import type { Order } from '../types';
+import { MENU_OPTIONS } from '../types';
+import type { Order, MenuOption } from '../types';
 
 const NICKNAME_KEY = 'fox_nickname';
 
@@ -48,7 +49,7 @@ export default function OrderPage() {
   const cutoff = isCutoffPassed(today, cutoffHour, cutoffMinute);
   const remaining = minutesUntilCutoff(cutoffHour, cutoffMinute);
 
-  const { menu, loading: menuLoading, error: menuError } = useMenu();
+  const { dataUrl: menuImageUrl } = useMenuImage();
   const { orders, loading: ordersLoading, refresh } = useOrders();
 
   // nickname state
@@ -56,10 +57,13 @@ export default function OrderPage() {
   const [editingNickname, setEditingNickname] = useState(!loadNickname());
   const nicknameRef = useRef<HTMLInputElement>(null);
 
-  // selection state
-  const [selectedMain, setSelectedMain] = useState('');
-  const [selectedSecondary, setSelectedSecondary] = useState('');
-  const [activeVariant, setActiveVariant] = useState<'veg' | 'nonveg' | null>(null);
+  // selection state — default to full vegetarian menu
+  const [selectedMain, setSelectedMain] = useState<MenuOption>(MENU_OPTIONS.vegMain);
+  const [selectedSecondary, setSelectedSecondary] = useState<MenuOption>(MENU_OPTIONS.vegSoup);
+  const [activeVariant, setActiveVariant] = useState<'veg' | 'nonveg' | null>('veg');
+
+  // note state
+  const [note, setNote] = useState('');
 
   // submission state
   const [submitting, setSubmitting] = useState(false);
@@ -68,19 +72,27 @@ export default function OrderPage() {
   const [deleting, setDeleting] = useState(false);
 
   // Existing order for this nickname
-  const normalizedNickname = nickname.trim().toLowerCase();
+  const normalizedNickname = nickname.trim();
   const myOrder: Order | undefined = orders?.orders.find(
     (o) => o.nickname === normalizedNickname,
   );
 
-  // When menu loads, default selections to veg variant
+  // Pre-fill selections from existing order when it loads
   useEffect(() => {
-    if (menu && !selectedMain && !selectedSecondary) {
-      setSelectedMain(menu.vegetarian.main);
-      setSelectedSecondary(menu.vegetarian.secondary);
-      setActiveVariant('veg');
+    if (myOrder) {
+      setSelectedMain(myOrder.main);
+      setSelectedSecondary(myOrder.secondary);
+      setNote(myOrder.note ?? '');
+      // Determine active variant from saved choices
+      if (myOrder.main === MENU_OPTIONS.vegMain && myOrder.secondary === MENU_OPTIONS.vegSoup) {
+        setActiveVariant('veg');
+      } else if (myOrder.main === MENU_OPTIONS.nonVegMain && myOrder.secondary === MENU_OPTIONS.nonVegSoup) {
+        setActiveVariant('nonveg');
+      } else {
+        setActiveVariant(null);
+      }
     }
-  }, [menu, selectedMain, selectedSecondary]);
+  }, [myOrder?.nickname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When editing nickname, focus the input
   useEffect(() => {
@@ -101,30 +113,29 @@ export default function OrderPage() {
   }
 
   function handleVariantSelect(variant: 'veg' | 'nonveg') {
-    if (!menu) return;
     if (variant === 'veg') {
-      setSelectedMain(menu.vegetarian.main);
-      setSelectedSecondary(menu.vegetarian.secondary);
+      setSelectedMain(MENU_OPTIONS.vegMain);
+      setSelectedSecondary(MENU_OPTIONS.vegSoup);
     } else {
-      setSelectedMain(menu.nonVegetarian.main);
-      setSelectedSecondary(menu.nonVegetarian.secondary);
+      setSelectedMain(MENU_OPTIONS.nonVegMain);
+      setSelectedSecondary(MENU_OPTIONS.nonVegSoup);
     }
     setActiveVariant(variant);
   }
 
-  function handleMainChange(val: string) {
+  function handleMainChange(val: MenuOption) {
     setSelectedMain(val);
     setActiveVariant(null);
   }
 
-  function handleSecondaryChange(val: string) {
+  function handleSecondaryChange(val: MenuOption) {
     setSelectedSecondary(val);
     setActiveVariant(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!menu || submitting) return;
+    if (submitting) return;
     setSubmitting(true);
     setSubmitError(null);
     setSubmitSuccess(false);
@@ -133,7 +144,7 @@ export default function OrderPage() {
       const res = await fetch(`/api/orders?date=${today}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nickname, main: selectedMain, secondary: selectedSecondary }),
+        body: JSON.stringify({ nickname, main: selectedMain, secondary: selectedSecondary, ...(note.trim() ? { note: note.trim() } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -173,9 +184,7 @@ export default function OrderPage() {
     }
   }
 
-  // ── Render states ────────────────────────────────────────────────────────
-
-  const isLoading = menuLoading || ordersLoading;
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="app">
@@ -191,28 +200,21 @@ export default function OrderPage() {
 
       <main className="container order-main">
         {/* Loading */}
-        {isLoading && (
+        {ordersLoading && (
           <div className="order-status">
-            <p className="text-muted">Loading today's menu…</p>
-          </div>
-        )}
-
-        {/* Error fetching menu */}
-        {!isLoading && menuError && (
-          <div className="order-status">
-            <p className="text-error">Could not load menu: {menuError}</p>
+            <p className="text-muted">Loading…</p>
           </div>
         )}
 
         {/* Weekend */}
-        {!isLoading && !menuError && weekend && (
+        {!ordersLoading && weekend && (
           <div className="order-status">
             <p className="text-muted">No orders on weekends. Enjoy your weekend! 🎉</p>
           </div>
         )}
 
         {/* Weekday content */}
-        {!isLoading && !menuError && !weekend && (
+        {!ordersLoading && !weekend && (
           <>
             {/* Cutoff banner */}
             {cutoff ? (
@@ -227,219 +229,207 @@ export default function OrderPage() {
               )
             )}
 
-            {/* No menu */}
-            {!menu ? (
-              <div className="order-status">
-                <p className="text-muted">No menu available for today. Check back later.</p>
+            {/* Menu image */}
+            {menuImageUrl && (
+              <div className="menu-image-wrapper">
+                <img
+                  src={menuImageUrl}
+                  alt="Today's menu"
+                  className="menu-image"
+                />
               </div>
-            ) : (
-              <>
-                {/* Menu cards */}
-                <section className="menu-grid">
-                  <div className="card menu-card">
-                    <h2 className="menu-card__title">🥦 Vegetarian</h2>
-                    <dl className="menu-card__list">
-                      <dt>Main</dt>
-                      <dd>{menu.vegetarian.main}</dd>
-                      <dt>Secondary</dt>
-                      <dd>{menu.vegetarian.secondary}</dd>
-                    </dl>
-                  </div>
-                  <div className="card menu-card">
-                    <h2 className="menu-card__title">🥩 Non-Vegetarian</h2>
-                    <dl className="menu-card__list">
-                      <dt>Main</dt>
-                      <dd>{menu.nonVegetarian.main}</dd>
-                      <dt>Secondary</dt>
-                      <dd>{menu.nonVegetarian.secondary}</dd>
-                    </dl>
-                  </div>
-                </section>
+            )}
 
-                {/* Order form — hidden after cutoff */}
-                {!cutoff && (
-                  <section className="order-form-section">
-                    {/* Nickname */}
-                    <div className="order-nickname">
-                      {editingNickname ? (
-                        <div className="form-field">
-                          <label htmlFor="nickname">Your nickname</label>
-                          <div className="nickname-input-row">
-                            <input
-                              id="nickname"
-                              ref={nicknameRef}
-                              type="text"
-                              maxLength={40}
-                              placeholder="e.g. maria"
-                              value={nickname}
-                              onChange={(e) => handleNicknameChange(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleNicknameCommit();
-                              }}
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={handleNicknameCommit}
-                              disabled={nickname.trim().length === 0}
-                            >
-                              OK
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="nickname-display">
-                          <span>
-                            Ordering as <strong>{nickname}</strong>
-                          </span>
-                          <button
-                            type="button"
-                            className="btn-link"
-                            onClick={() => setEditingNickname(true)}
-                          >
-                            Change
-                          </button>
-                        </div>
-                      )}
+            {/* Order form — hidden after cutoff */}
+            {!cutoff && (
+              <section className="order-form-section">
+                {/* Nickname */}
+                <div className="order-nickname">
+                  {editingNickname ? (
+                    <div className="form-field">
+                      <label htmlFor="nickname">Your nickname</label>
+                      <div className="nickname-input-row">
+                        <input
+                          id="nickname"
+                          ref={nicknameRef}
+                          type="text"
+                          maxLength={40}
+                          placeholder="e.g. maria"
+                          value={nickname}
+                          onChange={(e) => handleNicknameChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleNicknameCommit();
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleNicknameCommit}
+                          disabled={nickname.trim().length === 0}
+                        >
+                          OK
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="nickname-display">
+                      <span>
+                        Ordering as <strong>{nickname}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-link"
+                        onClick={() => setEditingNickname(true)}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Show form only when nickname is set */}
+                {!editingNickname && nickname.trim().length > 0 && (
+                  <form onSubmit={handleSubmit} className="order-form">
+                    {/* Existing order summary */}
+                    {myOrder && (
+                      <div className="card order-existing">
+                        <p className="text-muted order-existing__label">Your current order</p>
+                        <p>
+                          <strong>Soup:</strong> {myOrder.secondary}
+                        </p>
+                        <p>
+                          <strong>Main:</strong> {myOrder.main}
+                          {myOrder.note && <span className="order-note-display"> — {myOrder.note}</span>}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Quick-select variant buttons */}
+                    <div className="form-field">
+                      <label>Quick select</label>
+                      <div className="variant-buttons">
+                        <button
+                          type="button"
+                          className={`btn ${activeVariant === 'veg' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => handleVariantSelect('veg')}
+                        >
+                          🥦 Vegetarian Menu
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn ${activeVariant === 'nonveg' ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => handleVariantSelect('nonveg')}
+                        >
+                          🥩 Non-Vegetarian Menu
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Show form only when nickname is set */}
-                    {!editingNickname && nickname.trim().length > 0 && (
-                      <form onSubmit={handleSubmit} className="order-form">
-                        {/* Existing order summary */}
-                        {myOrder && (
-                          <div className="card order-existing">
-                            <p className="text-muted order-existing__label">Your current order</p>
-                            <p>
-                              <strong>Main:</strong> {myOrder.main}
-                            </p>
-                            <p>
-                              <strong>Secondary:</strong> {myOrder.secondary}
-                            </p>
-                          </div>
-                        )}
+                    {/* Course selects */}
+                    <div className="form-field">
+                      <label htmlFor="secondary-select">Soup course</label>
+                      <select
+                        id="secondary-select"
+                        value={selectedSecondary}
+                        onChange={(e) => handleSecondaryChange(e.target.value as MenuOption)}
+                      >
+                        <option value={MENU_OPTIONS.vegSoup}>{MENU_OPTIONS.vegSoup}</option>
+                        <option value={MENU_OPTIONS.nonVegSoup}>{MENU_OPTIONS.nonVegSoup}</option>
+                      </select>
+                    </div>
 
-                        {/* Quick-select variant buttons */}
-                        <div className="form-field">
-                          <label>Quick select</label>
-                          <div className="variant-buttons">
-                            <button
-                              type="button"
-                              className={`btn ${activeVariant === 'veg' ? 'btn-primary' : 'btn-secondary'}`}
-                              onClick={() => handleVariantSelect('veg')}
-                            >
-                              🥦 Vegetarian Menu
-                            </button>
-                            <button
-                              type="button"
-                              className={`btn ${activeVariant === 'nonveg' ? 'btn-primary' : 'btn-secondary'}`}
-                              onClick={() => handleVariantSelect('nonveg')}
-                            >
-                              🥩 Non-Vegetarian Menu
-                            </button>
-                          </div>
-                        </div>
+                    <div className="form-field">
+                      <label htmlFor="main-select">Main course</label>
+                      <select
+                        id="main-select"
+                        value={selectedMain}
+                        onChange={(e) => handleMainChange(e.target.value as MenuOption)}
+                      >
+                        <option value={MENU_OPTIONS.vegMain}>{MENU_OPTIONS.vegMain}</option>
+                        <option value={MENU_OPTIONS.nonVegMain}>{MENU_OPTIONS.nonVegMain}</option>
+                      </select>
+                    </div>
 
-                        {/* Custom dropdowns */}
-                        <div className="form-field">
-                          <label htmlFor="main-select">Main course</label>
-                          <select
-                            id="main-select"
-                            value={selectedMain}
-                            onChange={(e) => handleMainChange(e.target.value)}
-                          >
-                            <option value={menu.vegetarian.main}>
-                              Veg main: {menu.vegetarian.main}
-                            </option>
-                            <option value={menu.nonVegetarian.main}>
-                              Non-veg main: {menu.nonVegetarian.main}
-                            </option>
-                          </select>
-                        </div>
+                    <div className="form-field">
+                      <label htmlFor="note-input">
+                        Special request for main course <span className="text-muted">(optional)</span>
+                      </label>
+                      <input
+                        id="note-input"
+                        type="text"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="e.g. without potatoes"
+                        maxLength={100}
+                      />
+                    </div>
 
-                        <div className="form-field">
-                          <label htmlFor="secondary-select">Secondary course</label>
-                          <select
-                            id="secondary-select"
-                            value={selectedSecondary}
-                            onChange={(e) => handleSecondaryChange(e.target.value)}
-                          >
-                            <option value={menu.vegetarian.secondary}>
-                              Veg secondary: {menu.vegetarian.secondary}
-                            </option>
-                            <option value={menu.nonVegetarian.secondary}>
-                              Non-veg secondary: {menu.nonVegetarian.secondary}
-                            </option>
-                          </select>
-                        </div>
-
-                        {/* Feedback */}
-                        {submitError && <p className="text-error">{submitError}</p>}
-                        {submitSuccess && (
-                          <p className="text-success">
-                            {myOrder ? 'Order updated!' : 'Order placed!'}
-                          </p>
-                        )}
-
-                        {/* Actions */}
-                        <div className="order-actions">
-                          <button
-                            type="submit"
-                            className="btn btn-primary"
-                            disabled={submitting || !selectedMain || !selectedSecondary}
-                          >
-                            {submitting
-                              ? 'Saving…'
-                              : myOrder
-                              ? 'Update Order'
-                              : 'Place Order'}
-                          </button>
-                          {myOrder && (
-                            <button
-                              type="button"
-                              className="btn-link btn-link--danger"
-                              onClick={handleDelete}
-                              disabled={deleting}
-                            >
-                              {deleting ? 'Removing…' : 'Remove my order'}
-                            </button>
-                          )}
-                        </div>
-                      </form>
+                    {/* Feedback */}
+                    {submitError && <p className="text-error">{submitError}</p>}
+                    {submitSuccess && (
+                      <p className="text-success">
+                        {myOrder ? 'Order updated!' : 'Order placed!'}
+                      </p>
                     )}
-                  </section>
-                )}
 
-                {/* Orders list — always visible */}
-                {orders && orders.orders.length > 0 && (
-                  <section className="orders-list-section">
-                    <h2 className="orders-list-section__title">
-                      Today's orders ({orders.orders.length})
-                    </h2>
-                    <ul className="orders-list">
-                      {orders.orders.map((order) => (
-                        <li key={order.nickname} className="orders-list__item">
-                          <span className="orders-list__name">{order.nickname}</span>
-                          <span className="orders-list__meal">
-                            {order.main} · {order.secondary}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
+                    {/* Actions */}
+                    <div className="order-actions">
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={submitting}
+                      >
+                        {submitting
+                          ? 'Saving…'
+                          : myOrder
+                          ? 'Update Order'
+                          : 'Place Order'}
+                      </button>
+                      {myOrder && (
+                        <button
+                          type="button"
+                          className="btn-link btn-link--danger"
+                          onClick={handleDelete}
+                          disabled={deleting}
+                        >
+                          {deleting ? 'Removing…' : 'Remove my order'}
+                        </button>
+                      )}
+                    </div>
+                  </form>
                 )}
-              </>
+              </section>
+            )}
+
+            {/* Orders list — always visible */}
+            {orders && orders.orders.length > 0 && (
+              <section className="orders-list-section">
+                <h2 className="orders-list-section__title">
+                  Today's orders ({orders.orders.length})
+                </h2>
+                <ul className="orders-list">
+                  {orders.orders.map((order) => (
+                    <li key={order.nickname} className="orders-list__item">
+                      <span className="orders-list__name">{order.nickname}</span>
+                      <span className="orders-list__meal">
+                        {order.main}
+                        {order.note && <span className="order-note-display"> — {order.note}</span>}
+                        {' · '}{order.secondary}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
           </>
         )}
       </main>
 
-      {/* Footer */}
       <footer className="order-footer">
         <div className="container">
-          <p className="text-muted order-footer__privacy">
-            Only your nickname and meal selection are stored. Data is automatically deleted after
-            the order date. No database, no accounts.
+          <p className="text-muted order-footer__text">
+            Only your nickname and selected courses are stored. Data is automatically
+            deleted after a few days. No account or personal information required.
           </p>
         </div>
       </footer>

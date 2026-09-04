@@ -13,8 +13,8 @@ describe('server validation', () => {
   });
 
   it('normalizes nicknames', () => {
-    expect(normalizeNickname('  Fox User  ')).toBe('fox user');
-    expect(normalizeNickname('A'.repeat(41))).toBe('a'.repeat(40));
+    expect(normalizeNickname('  Fox User  ')).toBe('Fox User');
+    expect(normalizeNickname('A'.repeat(41))).toBe('A'.repeat(40));
   });
 
   it('validates nicknames', () => {

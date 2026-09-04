@@ -1,21 +1,22 @@
-// One variant (veg or non-veg)
-export interface MenuVariant {
-  main: string;       // main course name
-  secondary: string;  // secondary course name
-}
+// Fixed menu course options — used on both frontend and API
+export const MENU_OPTIONS = {
+  vegSoup:    'Vegi: Soup',
+  vegMain:    'Vegi: Main',
+  nonVegSoup: 'Non-Vegi: Soup',
+  nonVegMain: 'Non-Vegi: Main',
+} as const;
 
-// Daily menu stored in KV
-export interface DailyMenu {
-  date: string;       // "YYYY-MM-DD"
-  vegetarian: MenuVariant;
-  nonVegetarian: MenuVariant;
-}
+export type MenuOption = typeof MENU_OPTIONS[keyof typeof MENU_OPTIONS];
+
+export const VALID_MAINS:      readonly MenuOption[] = [MENU_OPTIONS.vegMain,    MENU_OPTIONS.nonVegMain];
+export const VALID_SECONDARIES: readonly MenuOption[] = [MENU_OPTIONS.vegSoup,   MENU_OPTIONS.nonVegSoup];
 
 // A single order stored within the daily orders object
 export interface Order {
-  nickname: string;   // normalized lowercase
-  main: string;
-  secondary: string;
+  nickname: string;   // trimmed; original casing preserved
+  main: MenuOption;
+  secondary: MenuOption;
+  note?: string;      // optional custom requirement for the main course
 }
 
 // The full daily orders object stored in KV
@@ -29,22 +30,9 @@ export interface SubmitOrderRequest {
   nickname: string;
   main: string;
   secondary: string;
-}
-
-export interface AdminMenuRequest {
-  date: string;
-  vegetarian: MenuVariant;
-  nonVegetarian: MenuVariant;
+  note?: string;
 }
 
 export interface ApiError {
   error: string;
-}
-
-// Response from POST /api/admin/parse-menu
-export interface ParseMenuResponse {
-  vegetarian: MenuVariant;
-  nonVegetarian: MenuVariant;
-  /** Raw text extracted by the model, for transparency */
-  raw: string;
 }

@@ -1,12 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getMenu, getOrders, setOrders } from './lib/kv';
+import { getOrders, setOrders } from './lib/kv';
 import {
   validateDate,
   validateNickname,
   normalizeNickname,
   isCutoffPassed,
 } from './lib/validation';
-import type { SubmitOrderRequest } from '../src/types';
+import { VALID_MAINS, VALID_SECONDARIES } from '../src/types';
+import type { SubmitOrderRequest, MenuOption } from '../src/types';
 
 const MAX_FIELD = 200;
 
@@ -36,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const body = req.body as Partial<SubmitOrderRequest>;
-    const { nickname: rawNickname, main, secondary } = body ?? {};
+    const { nickname: rawNickname, main, secondary, note: rawNote } = body ?? {};
 
     const nicknameError = validateNickname(rawNickname ?? '');
     if (nicknameError) return res.status(400).json({ error: nicknameError });
@@ -54,26 +55,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: `secondary must be at most ${MAX_FIELD} characters` });
     }
 
-    // Validate main/secondary exist in the menu
-    const menu = await getMenu(date);
-    if (!menu) {
-      return res.status(404).json({ error: 'No menu for this date' });
-    }
-    const validMains = [menu.vegetarian.main, menu.nonVegetarian.main];
-    const validSecondaries = [menu.vegetarian.secondary, menu.nonVegetarian.secondary];
-    if (!validMains.includes(main)) {
+    if (!(VALID_MAINS as readonly string[]).includes(main)) {
       return res.status(400).json({ error: 'main must be one of the available menu options' });
     }
-    if (!validSecondaries.includes(secondary)) {
+    if (!(VALID_SECONDARIES as readonly string[]).includes(secondary)) {
       return res.status(400).json({ error: 'secondary must be one of the available menu options' });
     }
+
+    const MAX_NOTE = 100;
+    if (rawNote !== undefined && rawNote !== null) {
+      if (typeof rawNote !== 'string') {
+        return res.status(400).json({ error: 'note must be a string' });
+      }
+      if (rawNote.length > MAX_NOTE) {
+        return res.status(400).json({ error: `note must be at most ${MAX_NOTE} characters` });
+      }
+    }
+    const note = typeof rawNote === 'string' ? rawNote.trim() : undefined;
 
     const nickname = normalizeNickname(rawNickname!);
     const dailyOrders = await getOrders(date);
 
     // Replace existing order for same nickname, or append
     const idx = dailyOrders.orders.findIndex((o) => o.nickname === nickname);
-    const order = { nickname, main, secondary };
+    const order = { nickname, main: main as MenuOption, secondary: secondary as MenuOption, ...(note ? { note } : {}) };
     if (idx >= 0) {
       dailyOrders.orders[idx] = order;
     } else {

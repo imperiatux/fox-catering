@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { DailyMenu, DailyOrders, Order, ParseMenuResponse } from '../types';
+import { MENU_OPTIONS } from '../types';
+import type { DailyOrders, Order } from '../types';
 
 type Tab = 'menu' | 'orders';
 
@@ -7,17 +8,27 @@ function todayString(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Aggregate orders into a summary string
-function buildSummary(orders: Order[]): string[] {
-  const counts: Record<string, number> = {};
-  for (const o of orders) {
-    const key = `${o.main} + ${o.secondary}`;
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
-  return Object.entries(counts).map(([meal, n]) => `${n}× ${meal}`);
+// Classify each order using the fixed course constants
+interface OrderCounts {
+  nonVeg: number;
+  veg: number;
+  custom: number;
 }
 
-// ── Menu Tab ──────────────────────────────────────────────────────────────────
+function classifyOrder(o: Order): 'nonVeg' | 'veg' | 'custom' {
+  if (o.note) return 'custom';
+  if (o.main === MENU_OPTIONS.nonVegMain && o.secondary === MENU_OPTIONS.nonVegSoup) return 'nonVeg';
+  if (o.main === MENU_OPTIONS.vegMain    && o.secondary === MENU_OPTIONS.vegSoup)    return 'veg';
+  return 'custom';
+}
+
+function categoriseOrders(orders: Order[]): OrderCounts {
+  const counts: OrderCounts = { nonVeg: 0, veg: 0, custom: 0 };
+  for (const o of orders) counts[classifyOrder(o)]++;
+  return counts;
+}
+
+// ── Menu Tab (image upload only) ──────────────────────────────────────────────
 
 interface MenuTabProps {
   date: string;
@@ -25,119 +36,67 @@ interface MenuTabProps {
 }
 
 function MenuTab({ date, onDateChange }: MenuTabProps) {
-  const [vegMain, setVegMain] = useState('');
-  const [vegSecondary, setVegSecondary] = useState('');
-  const [nonVegMain, setNonVegMain] = useState('');
-  const [nonVegSecondary, setNonVegSecondary] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'saving' | 'success' | 'error'>('idle');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [parseStatus, setParseStatus] = useState<'idle' | 'parsing' | 'done' | 'error'>('idle');
-  const [parseError, setParseError] = useState('');
+  const [storedUrl, setStoredUrl] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadDone, setUploadDone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadMenu = useCallback(async (d: string) => {
-    setStatus('loading');
-    setErrorMsg('');
-    try {
-      const res = await fetch(`/api/admin/menu?date=${d}`);
-      if (res.status === 401) {
-        window.location.href = '/admin';
-        return;
-      }
-      const data: DailyMenu & { vegetarian: null | DailyMenu['vegetarian']; nonVegetarian: null | DailyMenu['nonVegetarian'] } = await res.json();
-      setVegMain(data.vegetarian?.main ?? '');
-      setVegSecondary(data.vegetarian?.secondary ?? '');
-      setNonVegMain(data.nonVegetarian?.main ?? '');
-      setNonVegSecondary(data.nonVegetarian?.secondary ?? '');
-      setStatus('idle');
-    } catch {
-      setStatus('error');
-      setErrorMsg('Failed to load menu.');
-    }
-  }, []);
-
+  // Load the already-stored image for this date
   useEffect(() => {
-    loadMenu(date);
-  }, [date, loadMenu]);
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setStatus('saving');
-    setErrorMsg('');
-    try {
-      const res = await fetch(`/api/admin/menu?date=${date}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date,
-          vegetarian: { main: vegMain.trim(), secondary: vegSecondary.trim() },
-          nonVegetarian: { main: nonVegMain.trim(), secondary: nonVegSecondary.trim() },
-        }),
-      });
-      if (res.status === 401) {
-        window.location.href = '/admin';
-        return;
-      }
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErrorMsg(data.error ?? 'Failed to save menu.');
-        setStatus('error');
-        return;
-      }
-      setStatus('success');
-    } catch {
-      setStatus('error');
-      setErrorMsg('Network error. Please try again.');
-    }
-  }
+    setStoredUrl(null);
+    fetch(`/api/menu-image?date=${date}`)
+      .then(async (res) => {
+        if (res.status === 401) { window.location.href = '/admin'; return; }
+        if (!res.ok) return; // 404 = no image yet
+        const data: { dataUrl: string } = await res.json();
+        setStoredUrl(data.dataUrl);
+      })
+      .catch(() => { /* no image available */ });
+  }, [date]);
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Show preview
     setPreviewUrl(URL.createObjectURL(file));
-    setParseStatus('parsing');
-    setParseError('');
+    setUploading(true);
+    setUploadError('');
+    setUploadDone(false);
 
     const formData = new FormData();
     formData.append('image', file);
 
     try {
-      const res = await fetch('/api/admin/parse-menu', {
+      const res = await fetch(`/api/admin/parse-menu?date=${date}`, {
         method: 'POST',
         body: formData,
       });
       if (res.status === 401) { window.location.href = '/admin'; return; }
       if (!res.ok) {
         const data = await res.json().catch(() => ({})) as { error?: string };
-        setParseError(data.error ?? 'Failed to parse image.');
-        setParseStatus('error');
-        return;
+        setUploadError(data.error ?? 'Failed to upload image.');
+      } else {
+        setUploadDone(true);
+        setStoredUrl(null); // will be superseded by the new previewUrl
       }
-      const data: ParseMenuResponse = await res.json();
-      setVegMain(data.vegetarian.main);
-      setVegSecondary(data.vegetarian.secondary);
-      setNonVegMain(data.nonVegetarian.main);
-      setNonVegSecondary(data.nonVegetarian.secondary);
-      setParseStatus('done');
-      setStatus('idle'); // clear any previous save status
     } catch {
-      setParseError('Network error while parsing image.');
-      setParseStatus('error');
+      setUploadError('Network error while uploading image.');
+    } finally {
+      setUploading(false);
     }
   }
 
   function handleClearImage() {
     setPreviewUrl(null);
-    setParseStatus('idle');
-    setParseError('');
+    setUploadError('');
+    setUploadDone(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  const isLoading = status === 'loading';
-  const isSaving = status === 'saving';
+  // The image to display: fresh local preview takes priority over stored
+  const displayUrl = previewUrl ?? storedUrl;
 
   return (
     <section className="admin-section">
@@ -147,19 +106,17 @@ function MenuTab({ date, onDateChange }: MenuTabProps) {
           id="menu-date"
           type="date"
           value={date}
-          onChange={(e) => onDateChange(e.target.value)}
-          disabled={isLoading || isSaving}
+          onChange={(e) => { onDateChange(e.target.value); handleClearImage(); }}
         />
       </div>
 
-      {/* ── Image upload / OCR ─────────────────────────────────── */}
       <div className="parse-menu-upload">
         <p className="parse-menu-upload__label">
-          Upload the menu picture to auto-fill the fields below:
+          Upload the menu picture to display it on the order page:
         </p>
         <div className="parse-menu-upload__row">
           <label className="btn btn-secondary parse-menu-upload__btn" htmlFor="menu-image-input">
-            {parseStatus === 'parsing' ? 'Parsing…' : 'Upload menu image'}
+            {uploading ? 'Uploading…' : 'Upload menu image'}
           </label>
           <input
             id="menu-image-input"
@@ -168,7 +125,7 @@ function MenuTab({ date, onDateChange }: MenuTabProps) {
             accept="image/jpeg,image/png,image/webp"
             className="parse-menu-upload__input"
             onChange={handleImageUpload}
-            disabled={parseStatus === 'parsing' || isLoading || isSaving}
+            disabled={uploading}
           />
           {previewUrl && (
             <button
@@ -180,106 +137,30 @@ function MenuTab({ date, onDateChange }: MenuTabProps) {
             </button>
           )}
         </div>
-        {previewUrl && (
+        {displayUrl && (
           <img
-            src={previewUrl}
-            alt="Uploaded menu preview"
+            src={displayUrl}
+            alt="Menu image"
             className="parse-menu-upload__preview"
           />
         )}
-        {parseStatus === 'parsing' && (
-          <p className="text-muted parse-menu-upload__status">Reading menu from image…</p>
+        {uploading && (
+          <p className="text-muted parse-menu-upload__status">Uploading…</p>
         )}
-        {parseStatus === 'done' && (
+        {!uploading && uploadDone && !uploadError && (
           <p className="text-success parse-menu-upload__status" role="status">
-            Fields pre-filled from image — please review before saving.
+            Image saved — it will be shown on the order page.
           </p>
         )}
-        {parseStatus === 'error' && parseError && (
-          <p className="text-error parse-menu-upload__status" role="alert">{parseError}</p>
+        {!uploading && storedUrl && !previewUrl && !uploadError && (
+          <p className="text-muted parse-menu-upload__status">
+            Image already uploaded for this date.
+          </p>
+        )}
+        {uploadError && (
+          <p className="text-error parse-menu-upload__status" role="alert">{uploadError}</p>
         )}
       </div>
-
-      {isLoading ? (
-        <p className="text-muted">Loading…</p>
-      ) : (
-        <form onSubmit={handleSave} className="admin-menu-form">
-          <fieldset className="admin-fieldset">
-            <legend className="admin-fieldset-legend">🥦 Vegetarian</legend>
-            <div className="form-field">
-              <label htmlFor="veg-main">Main course</label>
-              <input
-                id="veg-main"
-                type="text"
-                value={vegMain}
-                onChange={(e) => setVegMain(e.target.value)}
-                placeholder="e.g. Mushroom risotto"
-                maxLength={200}
-                disabled={isSaving}
-                required
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="veg-secondary">Secondary course</label>
-              <input
-                id="veg-secondary"
-                type="text"
-                value={vegSecondary}
-                onChange={(e) => setVegSecondary(e.target.value)}
-                placeholder="e.g. Garden salad"
-                maxLength={200}
-                disabled={isSaving}
-                required
-              />
-            </div>
-          </fieldset>
-
-          <fieldset className="admin-fieldset">
-            <legend className="admin-fieldset-legend">🥩 Non-Vegetarian</legend>
-            <div className="form-field">
-              <label htmlFor="nonveg-main">Main course</label>
-              <input
-                id="nonveg-main"
-                type="text"
-                value={nonVegMain}
-                onChange={(e) => setNonVegMain(e.target.value)}
-                placeholder="e.g. Grilled chicken"
-                maxLength={200}
-                disabled={isSaving}
-                required
-              />
-            </div>
-            <div className="form-field">
-              <label htmlFor="nonveg-secondary">Secondary course</label>
-              <input
-                id="nonveg-secondary"
-                type="text"
-                value={nonVegSecondary}
-                onChange={(e) => setNonVegSecondary(e.target.value)}
-                placeholder="e.g. Caesar salad"
-                maxLength={200}
-                disabled={isSaving}
-                required
-              />
-            </div>
-          </fieldset>
-
-          {status === 'success' && (
-            <p className="text-success" role="status">Menu saved successfully.</p>
-          )}
-          {status === 'error' && errorMsg && (
-            <p className="text-error" role="alert">{errorMsg}</p>
-          )}
-
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={isSaving}
-          >
-            {isSaving ? 'Saving…' : 'Save Menu'}
-          </button>
-        </form>
-      )}
     </section>
   );
 }
@@ -295,6 +176,7 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [showAll, setShowAll] = useState(false);
 
   const loadOrders = useCallback(async (d: string) => {
     setStatus('loading');
@@ -318,7 +200,9 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
     loadOrders(date);
   }, [date, loadOrders]);
 
-  const summary = buildSummary(orders);
+  const counts = categoriseOrders(orders);
+  const customOrders = orders.filter((o) => classifyOrder(o) === 'custom');
+  const visibleOrders = showAll ? orders : customOrders;
 
   return (
     <section className="admin-section">
@@ -343,35 +227,59 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
             <p className="text-muted">No orders for this date.</p>
           ) : (
             <>
-              {summary.length > 0 && (
-                <div className="admin-summary card">
-                  <h3 className="admin-summary-title">Summary</h3>
-                  <ul className="admin-summary-list">
-                    {summary.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div className="admin-summary card">
+                <h3 className="admin-summary-title">Summary</h3>
+                <ul className="admin-summary-counts">
+                  <li><span className="count-label">Non-vegetarian</span><span className="count-value">{counts.nonVeg}</span></li>
+                  <li><span className="count-label">Vegetarian</span><span className="count-value">{counts.veg}</span></li>
+                  <li><span className="count-label">Custom</span><span className="count-value">{counts.custom}</span></li>
+                </ul>
+              </div>
 
-              <table className="admin-orders-table">
-                <thead>
-                  <tr>
-                    <th>Nickname</th>
-                    <th>Main Course</th>
-                    <th>Secondary Course</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o, i) => (
-                    <tr key={i}>
-                      <td>{o.nickname}</td>
-                      <td>{o.main}</td>
-                      <td>{o.secondary}</td>
+              <div className="admin-orders-header">
+                <h3 className="admin-orders-header__title">
+                  {showAll ? 'All orders' : 'Custom orders'}
+                  <span className="text-muted"> ({visibleOrders.length})</span>
+                </h3>
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => setShowAll((v) => !v)}
+                >
+                  {showAll ? 'Show custom only' : 'Show all orders'}
+                </button>
+              </div>
+
+              {visibleOrders.length === 0 ? (
+                <p className="text-muted">No custom orders for this date.</p>
+              ) : (
+                <table className="admin-orders-table">
+                  <thead>
+                    <tr>
+                      <th>Nickname</th>
+                      <th>Soup Course</th>
+                      <th>Main Course</th>
+                      <th>Note</th>
+                      {showAll && <th>Type</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {visibleOrders.map((o, i) => {
+                      const cls = classifyOrder(o);
+                      const typeLabel = cls === 'nonVeg' ? 'Non-veg' : cls === 'veg' ? 'Veg' : 'Custom';
+                      return (
+                        <tr key={i}>
+                          <td>{o.nickname}</td>
+                          <td>{o.secondary}</td>
+                          <td>{o.main}</td>
+                          <td className="text-muted">{o.note ?? '—'}</td>
+                          {showAll && <td>{typeLabel}</td>}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </>
           )}
 
@@ -499,7 +407,7 @@ export default function AdminDashboardPage() {
             className={`admin-tab-btn${tab === 'menu' ? ' admin-tab-btn--active' : ''}`}
             onClick={() => setTab('menu')}
           >
-            Menu Management
+            Menu Image
           </button>
           <button
             role="tab"

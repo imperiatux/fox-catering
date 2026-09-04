@@ -18,12 +18,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // --------------------------------------------------------------------------
 import configHandler from '../api/config.js';
 import healthHandler from '../api/health.js';
-import menuHandler from '../api/menu.js';
+import menuImageHandler from '../api/menu-image.js';
 import ordersHandler from '../api/orders.js';
 import adminCutoffHandler from '../api/admin/cutoff.js';
 import adminLoginHandler from '../api/admin/login.js';
 import adminLogoutHandler from '../api/admin/logout.js';
-import adminMenuHandler from '../api/admin/menu.js';
 import adminOrdersHandler from '../api/admin/orders.js';
 import adminExportHandler from '../api/admin/export.js';
 import adminParseMenuHandler from '../api/admin/parse-menu.js';
@@ -64,12 +63,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // --- API routes -----------------------------------------------------------
 app.all('/api/config', adapt(configHandler));
 app.all('/api/health', adapt(healthHandler));
-app.all('/api/menu', adapt(menuHandler));
+app.all('/api/menu-image', adapt(menuImageHandler));
 app.all('/api/orders', adapt(ordersHandler));
 app.all('/api/admin/cutoff', adapt(adminCutoffHandler));
 app.all('/api/admin/login', adapt(adminLoginHandler));
 app.all('/api/admin/logout', adapt(adminLogoutHandler));
-app.all('/api/admin/menu', adapt(adminMenuHandler));
 app.all('/api/admin/orders', adapt(adminOrdersHandler));
 app.all('/api/admin/export', adapt(adminExportHandler));
 app.post('/api/admin/parse-menu', adapt(adminParseMenuHandler));
