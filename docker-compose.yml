@@ -1,0 +1,59 @@
+services:
+  ocr:
+    build:
+      context: ./ocr
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Tesseract server listens on port 8884 — kept internal, not exposed to host
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8884/ > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Data is ephemeral by design (mirrors production TTL behaviour).
+    # Uncomment the volume line below to persist across container restarts:
+    # volumes:
+    #   - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # OCR service — Tesseract HTTP server (internal Docker network only)
+      OCR_URL: http://ocr:8884
+      # Redis connection — uses the service name as hostname inside Docker network
+      REDIS_URL: redis://redis:6379
+      # Set your organizer password here or via a .env file (see .env.example)
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Disable the Secure cookie flag for local HTTP access.
+      # Must be "false" (string) when running on plain HTTP (Docker/local).
+      # Remove or set to "true" for HTTPS/production deployments.
+      COOKIE_SECURE: "false"
+      # Cutoff time — defaults to 10:30 Europe/Bucharest. Override to test after cutoff.
+      # e.g. CUTOFF_HOUR=23 CUTOFF_MINUTE=59 to keep ordering open all day
+      CUTOFF_HOUR: ${CUTOFF_HOUR:-10}
+      CUTOFF_MINUTE: ${CUTOFF_MINUTE:-30}
+      # PORT defaults to 3000 in server/index.ts; override if needed
+      # PORT: 3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      ocr:
+        condition: service_healthy
+
+# volumes:
+#   redis-data:
