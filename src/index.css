@@ -333,6 +333,9 @@ label {
 .order-existing { margin-bottom: var(--space-2); }
 .order-existing__label { margin-bottom: var(--space-2); }
 .order-existing p { font-size: 0.9375rem; line-height: 1.5; }
+.my-orders-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.my-orders-list__item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: 0.9375rem; }
+.my-orders-list__detail { flex: 1; }
 
 /* Actions row */
 .order-actions {
@@ -371,6 +374,54 @@ label {
 }
 .orders-list__meal { color: var(--color-text-muted); }
 .order-note-display { font-style: italic; color: var(--color-text-muted); }
+.order-qty { font-weight: 700; color: var(--color-text); margin-right: 2px; }
+
+/* Quantity stepper */
+.qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: fit-content;
+}
+
+.qty-stepper__btn {
+  background: var(--color-surface);
+  border: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: background 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qty-stepper__btn:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.qty-stepper__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.qty-stepper__value {
+  min-width: 2.25rem;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0 0.25rem;
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  line-height: 2.25rem;
+  user-select: none;
+}
 
 /* Footer */
 .order-footer {

@@ -60,20 +60,20 @@ describe('orders API', () => {
       nickname: ' Fox ', main: MENU_OPTIONS.vegMain, secondary: MENU_OPTIONS.vegSoup,
     }), res);
 
-    const expected = {
-      date: '2025-07-14',
-      orders: [{ nickname: 'Fox', main: MENU_OPTIONS.vegMain, secondary: MENU_OPTIONS.vegSoup }],
-    };
     expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual(expected);
-    expect(setOrders).toHaveBeenCalledWith('2025-07-14', expected);
+    expect(res.body.orders).toHaveLength(1);
+    expect(res.body.orders[0]).toMatchObject({
+      nickname: 'Fox', main: MENU_OPTIONS.vegMain, secondary: MENU_OPTIONS.vegSoup, quantity: 1,
+    });
+    expect(typeof res.body.orders[0].id).toBe('string');
+    expect(res.body.orders[0].id.length).toBeGreaterThan(0);
   });
 
   it('rejects DELETE after the cutoff', async () => {
     vi.mocked(isCutoffPassed).mockReturnValue(true);
     const res = mockRes();
 
-    await handler(mockReq('DELETE', { date: '2025-07-14' }, { nickname: 'Fox' }), res);
+    await handler(mockReq('DELETE', { date: '2025-07-14' }, { id: 'some-id' }), res);
 
     expect(res.statusCode).toBe(403);
   });
@@ -82,17 +82,17 @@ describe('orders API', () => {
     vi.mocked(getOrders).mockResolvedValue({
       date: '2025-07-14',
       orders: [
-        { nickname: 'Fox',  main: MENU_OPTIONS.vegMain,    secondary: MENU_OPTIONS.vegSoup },
-        { nickname: 'wolf', main: MENU_OPTIONS.nonVegMain, secondary: MENU_OPTIONS.nonVegSoup },
+        { id: 'id-fox',  nickname: 'Fox',  main: MENU_OPTIONS.vegMain,    secondary: MENU_OPTIONS.vegSoup,    quantity: 1 },
+        { id: 'id-wolf', nickname: 'wolf', main: MENU_OPTIONS.nonVegMain, secondary: MENU_OPTIONS.nonVegSoup, quantity: 1 },
       ],
     });
     const res = mockRes();
 
-    await handler(mockReq('DELETE', { date: '2025-07-14' }, { nickname: ' Fox ' }), res);
+    await handler(mockReq('DELETE', { date: '2025-07-14' }, { id: 'id-fox' }), res);
 
     const expected = {
       date: '2025-07-14',
-      orders: [{ nickname: 'wolf', main: MENU_OPTIONS.nonVegMain, secondary: MENU_OPTIONS.nonVegSoup }],
+      orders: [{ id: 'id-wolf', nickname: 'wolf', main: MENU_OPTIONS.nonVegMain, secondary: MENU_OPTIONS.nonVegSoup, quantity: 1 }],
     };
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual(expected);

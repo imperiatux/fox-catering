@@ -13,8 +13,14 @@ export function getTodayBucharest(): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
-/** Returns true if the given "YYYY-MM-DD" date falls on a Saturday or Sunday. */
+/** Returns true if the given "YYYY-MM-DD" date falls on a Saturday or Sunday.
+ *  To bypass for testing, run in the browser console:
+ *    localStorage.setItem('fox_disable_weekend_check', 'true')
+ *  To restore: localStorage.removeItem('fox_disable_weekend_check') */
 export function isWeekend(date: string): boolean {
+  try {
+    if (localStorage.getItem('fox_disable_weekend_check') === 'true') return false;
+  } catch { /* ignore */ }
   // Parse as UTC noon to avoid timezone-at-midnight edge cases
   const d = new Date(`${date}T12:00:00Z`);
   const day = d.getUTCDay(); // 0=Sun, 6=Sat

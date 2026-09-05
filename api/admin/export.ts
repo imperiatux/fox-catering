@@ -28,9 +28,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { orders } = await getOrders(date);
 
   const rows = [
-    'nickname,main,note,secondary',
+    'nickname,quantity,soup_course,main_course,note',
     ...orders.map(
-      (o) => `${csvEscape(o.nickname)},${csvEscape(o.main)},${csvEscape(o.note ?? '')},${csvEscape(o.secondary)}`
+      (o) => `${csvEscape(o.nickname)},${o.quantity ?? 1},${csvEscape(o.secondary)},${csvEscape(o.main)},${csvEscape(o.note ?? '')}`
     ),
   ];
   const csv = rows.join('\r\n');

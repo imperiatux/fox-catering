@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const body = req.body as Partial<SubmitOrderRequest>;
-    const { nickname: rawNickname, main, secondary, note: rawNote } = body ?? {};
+    const { nickname: rawNickname, main, secondary, quantity: rawQuantity, note: rawNote } = body ?? {};
 
     const nicknameError = validateNickname(rawNickname ?? '');
     if (nicknameError) return res.status(400).json({ error: nicknameError });
@@ -62,6 +62,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'secondary must be one of the available menu options' });
     }
 
+    const quantity = rawQuantity == null ? 1 : Number(rawQuantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
+      return res.status(400).json({ error: 'quantity must be an integer between 1 and 10' });
+    }
+
     const MAX_NOTE = 100;
     if (rawNote !== undefined && rawNote !== null) {
       if (typeof rawNote !== 'string') {
@@ -76,14 +81,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const nickname = normalizeNickname(rawNickname!);
     const dailyOrders = await getOrders(date);
 
-    // Replace existing order for same nickname, or append
-    const idx = dailyOrders.orders.findIndex((o) => o.nickname === nickname);
-    const order = { nickname, main: main as MenuOption, secondary: secondary as MenuOption, ...(note ? { note } : {}) };
-    if (idx >= 0) {
-      dailyOrders.orders[idx] = order;
-    } else {
-      dailyOrders.orders.push(order);
-    }
+    // Always append a new order entry (one nickname can have multiple orders)
+    const id = crypto.randomUUID();
+    const order = { id, nickname, main: main as MenuOption, secondary: secondary as MenuOption, quantity, ...(note ? { note } : {}) };
+    dailyOrders.orders.push(order);
 
     await setOrders(date, dailyOrders);
     return res.status(200).json(dailyOrders);
@@ -102,14 +103,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Ordering is closed for this date (cutoff passed)' });
     }
 
-    const rawNickname =
-      (req.body as Record<string, string>)?.nickname ?? (req.query.nickname as string | undefined);
-    const nicknameError = validateNickname(rawNickname ?? '');
-    if (nicknameError) return res.status(400).json({ error: nicknameError });
+    const rawId = (req.body as Record<string, string>)?.id ?? (req.query.id as string | undefined);
+    if (!rawId || typeof rawId !== 'string' || rawId.trim().length === 0) {
+      return res.status(400).json({ error: 'Missing required param: id' });
+    }
 
-    const nickname = normalizeNickname(rawNickname!);
     const dailyOrders = await getOrders(date);
-    dailyOrders.orders = dailyOrders.orders.filter((o) => o.nickname !== nickname);
+    const before = dailyOrders.orders.length;
+    dailyOrders.orders = dailyOrders.orders.filter((o) => o.id !== rawId);
+    if (dailyOrders.orders.length === before) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
 
     await setOrders(date, dailyOrders);
     return res.status(200).json(dailyOrders);

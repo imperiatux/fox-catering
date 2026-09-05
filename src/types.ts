@@ -13,9 +13,11 @@ export const VALID_SECONDARIES: readonly MenuOption[] = [MENU_OPTIONS.vegSoup,  
 
 // A single order stored within the daily orders object
 export interface Order {
+  id: string;         // server-generated UUID; used for targeted deletion
   nickname: string;   // trimmed; original casing preserved
   main: MenuOption;
   secondary: MenuOption;
+  quantity: number;   // number of portions (1–10)
   note?: string;      // optional custom requirement for the main course
 }
 
@@ -30,7 +32,9 @@ export interface SubmitOrderRequest {
   nickname: string;
   main: string;
   secondary: string;
+  quantity?: number;
   note?: string;
+  // id is server-generated; not sent by the client
 }
 
 export interface ApiError {

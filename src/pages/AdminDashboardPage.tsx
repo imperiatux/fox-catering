@@ -24,7 +24,7 @@ function classifyOrder(o: Order): 'nonVeg' | 'veg' | 'custom' {
 
 function categoriseOrders(orders: Order[]): OrderCounts {
   const counts: OrderCounts = { nonVeg: 0, veg: 0, custom: 0 };
-  for (const o of orders) counts[classifyOrder(o)]++;
+  for (const o of orders) counts[classifyOrder(o)] += o.quantity;
   return counts;
 }
 
@@ -174,6 +174,7 @@ interface OrdersTabProps {
 
 function OrdersTab({ date, onDateChange }: OrdersTabProps) {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuImageUrl, setMenuImageUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -181,14 +182,22 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
   const loadOrders = useCallback(async (d: string) => {
     setStatus('loading');
     setErrorMsg('');
+    setMenuImageUrl(null);
     try {
-      const res = await fetch(`/api/admin/orders?date=${d}`);
-      if (res.status === 401) {
+      const [ordersRes, imageRes] = await Promise.all([
+        fetch(`/api/admin/orders?date=${d}`),
+        fetch(`/api/menu-image?date=${d}`),
+      ]);
+      if (ordersRes.status === 401) {
         window.location.href = '/admin';
         return;
       }
-      const data: DailyOrders = await res.json();
+      const data: DailyOrders = await ordersRes.json();
       setOrders(data.orders);
+      if (imageRes.ok) {
+        const img: { dataUrl: string } = await imageRes.json();
+        setMenuImageUrl(img.dataUrl);
+      }
       setStatus('idle');
     } catch {
       setStatus('error');
@@ -217,6 +226,12 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
         />
       </div>
 
+      {menuImageUrl && (
+        <div className="menu-image-wrapper">
+          <img src={menuImageUrl} alt="Today's menu" className="menu-image" />
+        </div>
+      )}
+
       {status === 'loading' ? (
         <p className="text-muted">Loading…</p>
       ) : status === 'error' ? (
@@ -239,7 +254,7 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
               <div className="admin-orders-header">
                 <h3 className="admin-orders-header__title">
                   {showAll ? 'All orders' : 'Custom orders'}
-                  <span className="text-muted"> ({visibleOrders.length})</span>
+                  <span className="text-muted"> ({visibleOrders.reduce((s, o) => s + o.quantity, 0)})</span>
                 </h3>
                 <button
                   type="button"
@@ -257,6 +272,7 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
                   <thead>
                     <tr>
                       <th>Nickname</th>
+                      <th>Qty</th>
                       <th>Soup Course</th>
                       <th>Main Course</th>
                       <th>Note</th>
@@ -270,6 +286,7 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
                       return (
                         <tr key={i}>
                           <td>{o.nickname}</td>
+                          <td>{o.quantity ?? 1}</td>
                           <td>{o.secondary}</td>
                           <td>{o.main}</td>
                           <td className="text-muted">{o.note ?? '—'}</td>
@@ -296,6 +313,42 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
         </>
       )}
     </section>
+  );
+}
+
+// ── Weekend Toggle ────────────────────────────────────────────────────────────
+
+const WEEKEND_KEY = 'fox_disable_weekend_check';
+
+function WeekendToggle() {
+  const [disabled, setDisabled] = useState(() => {
+    try { return localStorage.getItem(WEEKEND_KEY) === 'true'; } catch { return false; }
+  });
+
+  function toggle() {
+    const next = !disabled;
+    try { next ? localStorage.setItem(WEEKEND_KEY, 'true') : localStorage.removeItem(WEEKEND_KEY); } catch { /* ignore */ }
+    setDisabled(next);
+  }
+
+  const label = disabled ? 'Weekend check OFF — ordering open on weekends' : 'Weekend check ON — weekends blocked';
+
+  return (
+    <div className={`cutoff-toggle ${disabled ? 'cutoff-toggle--off' : 'cutoff-toggle--on'}`}>
+      <div className="cutoff-toggle__info">
+        <span className="cutoff-toggle__label">{label}</span>
+        {disabled && <span className="cutoff-toggle__badge">testing mode</span>}
+      </div>
+      <button
+        type="button"
+        className={`cutoff-toggle__btn ${disabled ? 'cutoff-toggle__btn--off' : 'cutoff-toggle__btn--on'}`}
+        onClick={toggle}
+        aria-pressed={disabled}
+        title={disabled ? 'Re-enable weekend block' : 'Disable weekend block for testing'}
+      >
+        {disabled ? 'Enable weekend check' : 'Disable weekend check'}
+      </button>
+    </div>
   );
 }
 
@@ -399,6 +452,7 @@ export default function AdminDashboardPage() {
 
       <main className="container admin-main">
         <CutoffToggle />
+        <WeekendToggle />
 
         <nav className="admin-tabs" role="tablist">
           <button
