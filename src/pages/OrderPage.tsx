@@ -300,7 +300,7 @@ export default function OrderPage() {
                           {myOrders.map((o) => (
                             <li key={o.id} className="my-orders-list__item">
                               <span className="my-orders-list__detail">
-                                <span className="order-qty">×{o.quantity ?? 1} </span>
+                                <span className="order-qty">{o.quantity ?? 1}× </span>
                                 {o.secondary}
                                 {' · '}{o.main}
                                 {o.note && <span className="order-note-display"> — {o.note}</span>}

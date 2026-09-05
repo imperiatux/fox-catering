@@ -187,7 +187,7 @@ function buildWhatsAppUrl(number: string, date: string, orders: Order[]): string
   if (customOrders.length > 0) {
     lines.push('', 'Custom requests:');
     for (const o of customOrders) {
-      const qty = `×${o.quantity} `;
+      const qty = `${o.quantity}× `;
       const note = o.note ? ` — ${o.note}` : '';
       lines.push(`- ${qty}${o.secondary} · ${o.main}${note}`);
     }
