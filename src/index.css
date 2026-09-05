@@ -820,3 +820,19 @@ label {
   width: 100%;
   margin-top: var(--space-1);
 }
+
+.whatsapp-edit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.whatsapp-number-input {
+  flex: 1;
+  min-width: 180px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+}

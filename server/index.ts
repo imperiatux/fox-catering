@@ -26,6 +26,7 @@ import adminLogoutHandler from '../api/admin/logout.js';
 import adminOrdersHandler from '../api/admin/orders.js';
 import adminExportHandler from '../api/admin/export.js';
 import adminParseMenuHandler from '../api/admin/parse-menu.js';
+import adminSettingsHandler from '../api/admin/settings.js';
 
 // --------------------------------------------------------------------------
 // Vercel → Express adapter
@@ -71,6 +72,7 @@ app.all('/api/admin/logout', adapt(adminLogoutHandler));
 app.all('/api/admin/orders', adapt(adminOrdersHandler));
 app.all('/api/admin/export', adapt(adminExportHandler));
 app.post('/api/admin/parse-menu', adapt(adminParseMenuHandler));
+app.all('/api/admin/settings', adapt(adminSettingsHandler));
 
 // --- Static frontend ------------------------------------------------------
 // process.cwd() is the repo root when run via `node dist-server/server/index.js`

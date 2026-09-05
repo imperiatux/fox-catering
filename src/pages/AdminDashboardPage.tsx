@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { MENU_OPTIONS } from '../types';
 import type { DailyOrders, Order } from '../types';
+import { formatDateDisplay } from '../utils/date';
 
 type Tab = 'menu' | 'orders';
 
@@ -165,14 +166,47 @@ function MenuTab({ date, onDateChange }: MenuTabProps) {
   );
 }
 
+// ── WhatsApp message builder ──────────────────────────────────────────────────
+
+function buildWhatsAppUrl(number: string, date: string, orders: Order[]): string {
+  const dateLabel = formatDateDisplay(date);
+  const counts = categoriseOrders(orders);
+  const total = orders.reduce((s, o) => s + o.quantity, 0);
+
+  const customOrders = orders.filter((o) => classifyOrder(o) === 'custom');
+
+  const lines: string[] = [
+    `🍽 Fox Catering order for ${dateLabel}`,
+    '',
+    `Non-vegetarian: ${counts.nonVeg}`,
+    `Vegetarian: ${counts.veg}`,
+    `Custom: ${counts.custom}`,
+    `Total: ${total}`,
+  ];
+
+  if (customOrders.length > 0) {
+    lines.push('', 'Custom requests:');
+    for (const o of customOrders) {
+      const qty = `×${o.quantity} `;
+      const note = o.note ? ` — ${o.note}` : '';
+      lines.push(`- ${qty}${o.secondary} · ${o.main}${note}`);
+    }
+  }
+
+  const text = encodeURIComponent(lines.join('\n'));
+  const clean = number.replace(/\D/g, '');
+  return `https://wa.me/${clean}?text=${text}`;
+}
+
 // ── Orders Tab ────────────────────────────────────────────────────────────────
 
 interface OrdersTabProps {
   date: string;
   onDateChange: (d: string) => void;
+  whatsappNumber: string;
 }
 
-function OrdersTab({ date, onDateChange }: OrdersTabProps) {
+function OrdersTab({ date, onDateChange, whatsappNumber }: OrdersTabProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [menuImageUrl, setMenuImageUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -308,11 +342,116 @@ function OrdersTab({ date, onDateChange }: OrdersTabProps) {
             >
               Export CSV
             </a>
+            <WhatsAppSendButton date={date} orders={orders} number={whatsappNumber} />
             <span className="text-muted">{orders.length} order{orders.length !== 1 ? 's' : ''}</span>
           </div>
         </>
       )}
     </section>
+  );
+}
+
+// ── WhatsApp ──────────────────────────────────────────────────────────────────
+
+interface WhatsAppSendButtonProps {
+  date: string;
+  orders: Order[];
+  number: string;
+}
+
+function WhatsAppSendButton({ date, orders, number }: WhatsAppSendButtonProps) {
+  if (!number || orders.length === 0) return null;
+  return (
+    <a
+      href={buildWhatsAppUrl(number, date, orders)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="btn btn-primary"
+    >
+      Send to WhatsApp
+    </a>
+  );
+}
+
+interface WhatsAppSettingsProps {
+  number: string;
+  onNumberChange: (n: string) => void;
+}
+
+function WhatsAppSettings({ number, onNumberChange }: WhatsAppSettingsProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save() {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ whatsappNumber: draft }),
+      });
+      if (res.status === 401) { window.location.href = '/admin'; return; }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(d.error ?? 'Failed to save.');
+      }
+      const d: { whatsappNumber?: string } = await res.json();
+      onNumberChange(d.whatsappNumber ?? '');
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEdit() {
+    setDraft(number);
+    setEditing(true);
+  }
+
+  const label = number
+    ? `WhatsApp: +${number}`
+    : 'WhatsApp number not set — Send button hidden';
+
+  return (
+    <div className={`cutoff-toggle ${number ? 'cutoff-toggle--on' : 'cutoff-toggle--off'}`}>
+      <div className="cutoff-toggle__info">
+        <span className="cutoff-toggle__label">{label}</span>
+      </div>
+      {editing ? (
+        <div className="whatsapp-edit-row">
+          <input
+            type="tel"
+            className="whatsapp-number-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. 40712345678"
+            // eslint-disable-next-line jsx-a11y/no-autofocus
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') setEditing(false); }}
+          />
+          <button type="button" className="cutoff-toggle__btn cutoff-toggle__btn--on" onClick={() => void save()} disabled={busy}>
+            {busy ? '…' : 'Save'}
+          </button>
+          <button type="button" className="cutoff-toggle__btn cutoff-toggle__btn--off" onClick={() => setEditing(false)} disabled={busy}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={`cutoff-toggle__btn ${number ? 'cutoff-toggle__btn--on' : 'cutoff-toggle__btn--off'}`}
+          onClick={startEdit}
+        >
+          {number ? 'Change number' : 'Set number'}
+        </button>
+      )}
+      {error && <p className="text-error cutoff-toggle__error">{error}</p>}
+    </div>
   );
 }
 
@@ -433,6 +572,19 @@ export default function AdminDashboardPage() {
   const [tab, setTab] = useState<Tab>('menu');
   const [menuDate, setMenuDate] = useState(todayString);
   const [ordersDate, setOrdersDate] = useState(todayString);
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((r) => {
+        if (r.status === 401) { window.location.href = '/admin'; return null; }
+        return r.json();
+      })
+      .then((data: { whatsappNumber?: string } | null) => {
+        if (data) setWhatsappNumber(data.whatsappNumber ?? '');
+      })
+      .catch(() => { /* non-critical */ });
+  }, []);
 
   async function handleLogout() {
     await fetch('/api/admin/logout', { method: 'POST' });
@@ -453,6 +605,7 @@ export default function AdminDashboardPage() {
       <main className="container admin-main">
         <CutoffToggle />
         <WeekendToggle />
+        <WhatsAppSettings number={whatsappNumber} onNumberChange={setWhatsappNumber} />
 
         <nav className="admin-tabs" role="tablist">
           <button
@@ -477,7 +630,7 @@ export default function AdminDashboardPage() {
           <MenuTab date={menuDate} onDateChange={setMenuDate} />
         )}
         {tab === 'orders' && (
-          <OrdersTab date={ordersDate} onDateChange={setOrdersDate} />
+          <OrdersTab date={ordersDate} onDateChange={setOrdersDate} whatsappNumber={whatsappNumber} />
         )}
       </main>
     </div>

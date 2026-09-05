@@ -52,7 +52,7 @@ export default function OrderPage() {
   const cutoff = isCutoffPassed(today, cutoffHour, cutoffMinute);
   const remaining = minutesUntilCutoff(cutoffHour, cutoffMinute);
 
-  const { dataUrl: menuImageUrl } = useMenuImage();
+  const { dataUrl: menuImageUrl, loading: menuLoading } = useMenuImage();
   const { orders, loading: ordersLoading, refresh } = useOrders();
 
   // nickname state
@@ -195,21 +195,28 @@ export default function OrderPage() {
 
       <main className="container order-main">
         {/* Loading */}
-        {ordersLoading && (
+        {(ordersLoading || menuLoading) && (
           <div className="order-status">
             <p className="text-muted">Loading…</p>
           </div>
         )}
 
         {/* Weekend */}
-        {!ordersLoading && weekend && (
+        {!ordersLoading && !menuLoading && weekend && (
           <div className="order-status">
             <p className="text-muted">No orders on weekends. Enjoy your weekend! 🎉</p>
           </div>
         )}
 
+        {/* No menu uploaded yet */}
+        {!ordersLoading && !menuLoading && !weekend && !menuImageUrl && (
+          <div className="order-status">
+            <p className="text-muted">No menu available yet for today. Check back soon!</p>
+          </div>
+        )}
+
         {/* Weekday content */}
-        {!ordersLoading && !weekend && (
+        {!ordersLoading && !menuLoading && !weekend && menuImageUrl && (
           <>
             {/* Cutoff banner */}
             {cutoff ? (
