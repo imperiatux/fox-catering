@@ -250,8 +250,8 @@ function PlacedOrderRow({
   onDelete,
 }: {
   order: Order;
-  onEdit: (order: Order) => void;
-  onDelete: (id: string) => void;
+  onEdit?: (order: Order) => void;
+  onDelete?: (id: string) => void;
 }) {
   const t = useTranslations("order");
 
@@ -291,22 +291,28 @@ function PlacedOrderRow({
             </div>
           )}
         </div>
-        <div className="flex gap-3 shrink-0 mt-0.5">
-          <button
-            type="button"
-            onClick={() => onEdit(order)}
-            className="text-brand-600 hover:text-brand-700 text-xs font-medium"
-          >
-            {t("edit")}
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(order.id)}
-            className="text-red-500 hover:text-red-700 text-xs font-medium"
-          >
-            {t("delete")}
-          </button>
-        </div>
+        {(onEdit || onDelete) && (
+          <div className="flex gap-3 shrink-0 mt-0.5">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(order)}
+                className="text-brand-600 hover:text-brand-700 text-xs font-medium"
+              >
+                {t("edit")}
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(order.id)}
+                className="text-red-500 hover:text-red-700 text-xs font-medium"
+              >
+                {t("delete")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -636,7 +642,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         </>
       )}
 
-      {/* My orders */}
+      {/* My orders — always shown when nickname is set; edit/delete only when open */}
       {nickname && (
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-gray-900 text-base mb-3">{t("my_orders")}</h2>
@@ -654,7 +660,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
           )}
           {!ordersLoading &&
             myOrders.map((order) =>
-              editingOrder?.id === order.id ? (
+              menu.isOpen && editingOrder?.id === order.id ? (
                 <EditOrderForm
                   key={order.id}
                   order={editingOrder}
@@ -667,8 +673,8 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                 <PlacedOrderRow
                   key={order.id}
                   order={order}
-                  onEdit={(o) => setEditingOrder({ ...o })}
-                  onDelete={handleDelete}
+                  onEdit={menu.isOpen ? (o) => setEditingOrder({ ...o }) : undefined}
+                  onDelete={menu.isOpen ? handleDelete : undefined}
                 />
               ),
             )}
