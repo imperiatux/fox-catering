@@ -1,0 +1,42 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Data is ephemeral by design (mirrors production TTL behaviour).
+    # Uncomment the volume line below to persist across container restarts:
+    # volumes:
+    #   - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Redis connection — uses the service name as hostname inside Docker network
+      REDIS_URL: redis://redis:6379
+      # Set your organizer password here or via a .env file (see .env.example)
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Disable the Secure cookie flag for local HTTP access.
+      # Must be "false" (string) when running on plain HTTP (Docker/local).
+      # Remove or set to "true" for HTTPS/production deployments.
+      COOKIE_SECURE: "false"
+      # Cutoff time — defaults to 10:30 Europe/Bucharest. Override to test after cutoff.
+      # e.g. CUTOFF_HOUR=23 CUTOFF_MINUTE=59 to keep ordering open all day
+      CUTOFF_HOUR: ${CUTOFF_HOUR:-10}
+      CUTOFF_MINUTE: ${CUTOFF_MINUTE:-30}
+      # PORT defaults to 3000 in server/index.ts; override if needed
+      # PORT: 3000
+    depends_on:
+      redis:
+        condition: service_healthy
+
+# volumes:
+#   redis-data:
