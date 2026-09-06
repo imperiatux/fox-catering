@@ -181,6 +181,8 @@ Build a responsive full-stack web application for managing daily lunch menu orde
 | Language switcher | Flag emoji buttons (🇷🇴 / 🇬🇧); active state driven by server-resolved locale prop |
 | Cutoff timezone fix | `TZ=Europe/Bucharest` added to Docker env so `new Date().getHours()` matches admin-configured times |
 | Favicon | 🦊 emoji favicon via `src/app/icon.svg` |
+| Course labels renamed | "Soup" → "Felul 1" / "First course"; "Main" → "Felul 2" / "Second course"; "Meat" → "Meniul zilei" / "Daily menu" |
+| Read-only orders after cutoff | Edit/delete buttons hidden on "My orders" when `menu.isOpen` is false; orders displayed as plain read-only rows |
 
 ---
 
