@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import sharp from "sharp";
 import { validateAdminSession } from "@/lib/auth";
-import { getMenuPhoto, setMenuPhoto } from "@/lib/redis";
+import { getMenuPhoto, setMenuPhoto, localDateString } from "@/lib/redis";
 
 const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
 
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
   const filename = await getMenuPhoto(date);
 
   if (!filename) {
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
   const filename = `menu-${date}.jpg`;
   const outputPath = path.join(UPLOADS_DIR, filename);
 

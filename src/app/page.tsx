@@ -1,4 +1,4 @@
-import { getMenuPhoto, getSettings } from "@/lib/redis";
+import { getMenuPhoto, getSettings, localDateString } from "@/lib/redis";
 import OrderPage from "@/components/OrderPage";
 
 // This page fetches live data from Redis — opt out of static generation
@@ -12,7 +12,7 @@ interface MenuStatus {
 }
 
 async function fetchMenuStatus(): Promise<MenuStatus> {
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
 
   const [filename, settings] = await Promise.all([
     getMenuPhoto(date),
@@ -20,6 +20,11 @@ async function fetchMenuStatus(): Promise<MenuStatus> {
   ]);
 
   const photoUrl = filename ? `/uploads/${filename}` : null;
+
+  // No photo uploaded yet — ordering is not possible.
+  if (!filename) {
+    return { photoUrl: null, isOpen: false, reason: "no_photo" };
+  }
 
   const now = new Date();
   const isoWeekday = now.getDay() === 0 ? 7 : now.getDay();

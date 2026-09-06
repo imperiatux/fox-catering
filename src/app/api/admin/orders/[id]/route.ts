@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAdminSession } from "@/lib/auth";
-import { deleteOrder } from "@/lib/redis";
+import { deleteOrder, localDateString } from "@/lib/redis";
 
 export async function DELETE(
   request: NextRequest,
@@ -12,7 +12,7 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
   await deleteOrder(date, id);
 
   return NextResponse.json({ success: true });

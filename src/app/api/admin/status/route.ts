@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAdminSession } from "@/lib/auth";
-import { getOrders, getMenuPhoto, getSettings } from "@/lib/redis";
+import { getOrders, getMenuPhoto, getSettings, localDateString } from "@/lib/redis";
 
 /**
  * GET /api/admin/status
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
 
   const [orders, menuPhoto, settings] = await Promise.all([
     getOrders(date),

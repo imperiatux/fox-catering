@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { addOrder, getOrders, getSettings } from "@/lib/redis";
+import { addOrder, getOrders, getSettings, getMenuPhoto, localDateString } from "@/lib/redis";
 import type { Order, MenuType } from "@/types";
 
 /**
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "nickname is required" }, { status: 400 });
   }
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
   const all = await getOrders(date);
   const mine = all.filter((o) => o.nickname === nickname);
 
@@ -66,8 +66,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "qty must be a positive integer" }, { status: 400 });
   }
 
-  // --- Settings / cutoff check ---
-  const settings = await getSettings();
+  // --- Settings / cutoff / photo check ---
+  const [settings, menuPhoto] = await Promise.all([
+    getSettings(),
+    getMenuPhoto(localDateString()),
+  ]);
+
+  if (!menuPhoto) {
+    return NextResponse.json({ error: "no_photo" }, { status: 403 });
+  }
 
   const now = new Date();
   const isoWeekday = now.getDay() === 0 ? 7 : now.getDay();
@@ -84,7 +91,7 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Persist ---
-  const date = now.toISOString().split("T")[0];
+  const date = localDateString();
   const order: Order = {
     id: uuidv4(),
     nickname,

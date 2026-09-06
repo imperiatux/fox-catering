@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { getOrders, getMenuPhoto, getSettings } from "@/lib/redis";
+import { getOrders, getMenuPhoto, getSettings, localDateString } from "@/lib/redis";
 
 async function getStatus() {
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
 
   const [orders, menuPhoto, settings] = await Promise.all([
     getOrders(date),

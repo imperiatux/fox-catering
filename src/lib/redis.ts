@@ -12,6 +12,26 @@ import Redis from 'ioredis';
 import type { Order, AppSettings } from '@/types';
 
 // ---------------------------------------------------------------------------
+// Date helper — always use the server-local date (TZ env var = Europe/Bucharest)
+// so that "today" matches the admin-configured timezone, not UTC.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the current local date as "YYYY-MM-DD" using the server's TZ
+ * environment variable (set to Europe/Bucharest in docker-compose.yml).
+ * Avoids the UTC-midnight bug where toISOString() returns yesterday's date
+ * at e.g. 00:10 EEST (= 21:10 UTC the previous day).
+ */
+export function localDateString(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.TZ ?? 'Europe/Bucharest',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()); // en-CA locale formats as YYYY-MM-DD
+}
+
+// ---------------------------------------------------------------------------
 // Singleton client
 // ---------------------------------------------------------------------------
 

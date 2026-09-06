@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrders, deleteOrder, updateOrder } from "@/lib/redis";
+import { getOrders, deleteOrder, updateOrder, localDateString } from "@/lib/redis";
 import type { MenuType } from "@/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -24,7 +24,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "nickname is required" }, { status: 400 });
   }
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
   const orders = await getOrders(date);
   const order = orders.find((o) => o.id === id);
 
@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "nickname is required" }, { status: 400 });
   }
 
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
   const orders = await getOrders(date);
   const order = orders.find((o) => o.id === id);
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMenuPhoto, getSettings } from "@/lib/redis";
+import { getMenuPhoto, getSettings, localDateString } from "@/lib/redis";
 
 /**
  * GET /api/menu
@@ -8,10 +8,11 @@ import { getMenuPhoto, getSettings } from "@/lib/redis";
  *
  * isOpen = true when:
  *   - today is an active weekday  AND
+ *   - a menu photo has been uploaded for today  AND
  *   - cutoffEnabled is false  OR  current time < cutoff time
  */
 export async function GET() {
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDateString();
 
   const [filename, settings] = await Promise.all([
     getMenuPhoto(date),
@@ -19,6 +20,11 @@ export async function GET() {
   ]);
 
   const photoUrl = filename ? `/uploads/${filename}` : null;
+
+  // No photo uploaded yet — ordering is not possible.
+  if (!filename) {
+    return NextResponse.json({ photoUrl: null, isOpen: false, reason: "no_photo" });
+  }
 
   // ISO weekday: getDay() returns 0 (Sun) … 6 (Sat); convert to 1 (Mon) … 7 (Sun)
   const now = new Date();

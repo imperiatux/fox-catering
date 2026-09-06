@@ -494,6 +494,8 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
           <p className="text-sm text-amber-700 mt-0.5">
             {menu.reason === "not_active_day"
               ? tErr("not_active_day")
+              : menu.reason === "no_photo"
+              ? t("no_menu")
               : t("closed_message")}
           </p>
         </div>
