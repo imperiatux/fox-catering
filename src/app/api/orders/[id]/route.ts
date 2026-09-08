@@ -78,7 +78,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   // Build patch — only include fields that were actually provided
-  const VALID_MENU_TYPES: MenuType[] = ["veg", "non-veg", "custom"];
+  const VALID_MENU_TYPES: MenuType[] = ["veg", "non-veg", "soup-only", "main-only", "custom"];
   const patch: Parameters<typeof updateOrder>[2] = {};
 
   if (body.menuType !== undefined) {
@@ -87,14 +87,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     patch.menuType = body.menuType as MenuType;
   }
+  const VALID_COURSE_VALUES = ["non-veg", "veg", "none"];
   if (body.soup !== undefined) {
     const soup = typeof body.soup === "string" ? body.soup.trim() : "";
-    if (!soup) return NextResponse.json({ error: "soup cannot be empty" }, { status: 400 });
+    if (!VALID_COURSE_VALUES.includes(soup)) return NextResponse.json({ error: "Invalid soup value" }, { status: 400 });
     patch.soup = soup;
   }
   if (body.main !== undefined) {
     const main = typeof body.main === "string" ? body.main.trim() : "";
-    if (!main) return NextResponse.json({ error: "main cannot be empty" }, { status: 400 });
+    if (!VALID_COURSE_VALUES.includes(main)) return NextResponse.json({ error: "Invalid main value" }, { status: 400 });
     patch.main = main;
   }
   if (body.note !== undefined) {

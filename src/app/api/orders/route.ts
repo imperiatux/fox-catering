@@ -50,14 +50,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "nickname is required" }, { status: 400 });
   }
 
-  const VALID_MENU_TYPES: MenuType[] = ["veg", "non-veg", "custom"];
+  const VALID_MENU_TYPES: MenuType[] = ["veg", "non-veg", "soup-only", "main-only", "custom"];
   const menuType = body.menuType as MenuType;
   if (!VALID_MENU_TYPES.includes(menuType)) {
     return NextResponse.json({ error: "Invalid menuType" }, { status: 400 });
   }
 
+  const VALID_COURSE_VALUES = ["non-veg", "veg", "none"];
   const soup = typeof body.soup === "string" ? body.soup.trim() : "";
   const main = typeof body.main === "string" ? body.main.trim() : "";
+  if (!VALID_COURSE_VALUES.includes(soup)) {
+    return NextResponse.json({ error: "Invalid soup value" }, { status: 400 });
+  }
+  if (!VALID_COURSE_VALUES.includes(main)) {
+    return NextResponse.json({ error: "Invalid main value" }, { status: 400 });
+  }
 
   const note = typeof body.note === "string" ? body.note.trim() : undefined;
 

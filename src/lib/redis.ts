@@ -4,7 +4,9 @@
  * Key schema:
  *   menu:YYYY-MM-DD        String  — filename of the uploaded menu photo
  *   orders:YYYY-MM-DD      List    — JSON-serialised Order objects (rpush / lrange)
- *   settings               Hash    — cutoffHour, cutoffMinute, cutoffEnabled, activeDays
+ *   tips:YYYY-MM-DD        Hash    — nickname → tip amount (RON, string-encoded float)
+ *   settings               Hash    — cutoffHour, cutoffMinute, cutoffEnabled, activeDays,
+ *                                    whatsappPhone, priceNonVeg, priceVeg, priceSoup, priceMain, priceCustom
  *   session:<token>        String  — "admin" with 8 h TTL
  */
 
@@ -73,6 +75,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   cutoffEnabled: true,
   activeDays: [1, 2, 3, 4, 5, 6, 7],
   whatsappPhone: '',
+  priceNonVeg: 0,
+  priceVeg: 0,
+  priceSoupNonVeg: 0,
+  priceSoupVeg: 0,
+  priceMainNonVeg: 0,
+  priceMainVeg: 0,
+  priceCustom: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +154,38 @@ export async function deleteMenuPhoto(date: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Tip functions
+// Key: tips:YYYY-MM-DD (Redis HASH — nickname → RON amount as string)
+// One entry per nickname per day; independent of the orders list.
+// ---------------------------------------------------------------------------
+
+/** Returns the tip for the given nickname today, or null if not set. */
+export async function getTip(date: string, nickname: string): Promise<number | null> {
+  const raw = await redis.hget(`tips:${date}`, nickname);
+  if (raw === null) return null;
+  return Number(raw);
+}
+
+/** Sets (or overwrites) the tip for the given nickname today. */
+export async function setTip(date: string, nickname: string, tip: number): Promise<void> {
+  await redis.hset(`tips:${date}`, nickname, String(tip));
+}
+
+/** Returns the sum of all tips for a given date. */
+export async function getTipsTotal(date: string): Promise<number> {
+  const all = await redis.hgetall(`tips:${date}`);
+  if (!all) return 0;
+  return Object.values(all).reduce((sum, v) => sum + Number(v), 0);
+}
+
+/** Returns all tips for a given date as a nickname → amount map. */
+export async function getAllTips(date: string): Promise<Record<string, number>> {
+  const all = await redis.hgetall(`tips:${date}`);
+  if (!all) return {};
+  return Object.fromEntries(Object.entries(all).map(([k, v]) => [k, Number(v)]));
+}
+
+// ---------------------------------------------------------------------------
 // Settings functions
 // Key: settings (Redis HASH)
 // Fields: cutoffHour, cutoffMinute, cutoffEnabled, activeDays, whatsappPhone
@@ -169,6 +210,13 @@ export async function getSettings(): Promise<AppSettings> {
     cutoffEnabled: raw.cutoffEnabled === 'true',
     activeDays: JSON.parse(raw.activeDays) as number[],
     whatsappPhone: raw.whatsappPhone ?? '',
+    priceNonVeg: Number(raw.priceNonVeg ?? 0),
+    priceVeg: Number(raw.priceVeg ?? 0),
+    priceSoupNonVeg: Number(raw.priceSoupNonVeg ?? raw.priceSoup ?? 0),
+    priceSoupVeg: Number(raw.priceSoupVeg ?? raw.priceSoup ?? 0),
+    priceMainNonVeg: Number(raw.priceMainNonVeg ?? raw.priceMain ?? 0),
+    priceMainVeg: Number(raw.priceMainVeg ?? raw.priceMain ?? 0),
+    priceCustom: Number(raw.priceCustom ?? 0),
   };
 }
 
@@ -186,6 +234,13 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
     cutoffEnabled: String(next.cutoffEnabled),
     activeDays: JSON.stringify(next.activeDays),
     whatsappPhone: next.whatsappPhone ?? '',
+    priceNonVeg: String(next.priceNonVeg ?? 0),
+    priceVeg: String(next.priceVeg ?? 0),
+    priceSoupNonVeg: String(next.priceSoupNonVeg ?? 0),
+    priceSoupVeg: String(next.priceSoupVeg ?? 0),
+    priceMainNonVeg: String(next.priceMainNonVeg ?? 0),
+    priceMainVeg: String(next.priceMainVeg ?? 0),
+    priceCustom: String(next.priceCustom ?? 0),
   });
 
   return next;
@@ -198,6 +253,13 @@ async function seedDefaultSettings(): Promise<void> {
     cutoffEnabled: String(DEFAULT_SETTINGS.cutoffEnabled),
     activeDays: JSON.stringify(DEFAULT_SETTINGS.activeDays),
     whatsappPhone: DEFAULT_SETTINGS.whatsappPhone,
+    priceNonVeg: String(DEFAULT_SETTINGS.priceNonVeg),
+    priceVeg: String(DEFAULT_SETTINGS.priceVeg),
+    priceSoupNonVeg: String(DEFAULT_SETTINGS.priceSoupNonVeg),
+    priceSoupVeg: String(DEFAULT_SETTINGS.priceSoupVeg),
+    priceMainNonVeg: String(DEFAULT_SETTINGS.priceMainNonVeg),
+    priceMainVeg: String(DEFAULT_SETTINGS.priceMainVeg),
+    priceCustom: String(DEFAULT_SETTINGS.priceCustom),
   });
 }
 

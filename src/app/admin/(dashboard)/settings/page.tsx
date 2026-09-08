@@ -26,6 +26,13 @@ export default function AdminSettingsPage() {
     cutoffEnabled: true,
     activeDays: [1, 2, 3, 4, 5, 6, 7],
     whatsappPhone: '',
+    priceNonVeg: 0,
+    priceVeg: 0,
+    priceSoupNonVeg: 0,
+    priceSoupVeg: 0,
+    priceMainNonVeg: 0,
+    priceMainVeg: 0,
+    priceCustom: 0,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -191,6 +198,46 @@ export default function AdminSettingsPage() {
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Prices */}
+        <div className="px-6 py-5">
+          <p className="text-sm font-semibold text-gray-800 mb-1">{t("prices")}</p>
+          <p className="text-xs text-gray-400 mb-4">{t("price_hint")}</p>
+          <div className="grid grid-cols-2 gap-4">
+            {(
+              [
+                { key: "priceNonVeg",     label: t("price_nonveg") },
+                { key: "priceVeg",        label: t("price_veg") },
+                { key: "priceSoupNonVeg", label: t("price_soup_nonveg") },
+                { key: "priceSoupVeg",    label: t("price_soup_veg") },
+                { key: "priceMainNonVeg", label: t("price_main_nonveg") },
+                { key: "priceMainVeg",    label: t("price_main_veg") },
+                { key: "priceCustom",     label: t("price_custom") },
+              ] as { key: keyof AppSettings; label: string }[]
+            ).map(({ key, label }) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-xs text-gray-500">{label}</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="0"
+                    value={(settings[key] as number) === 0 ? "" : (settings[key] as number)}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        [key]: e.target.value === "" ? 0 : Math.max(0, Number(e.target.value)),
+                      }))
+                    }
+                    className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <span className="text-xs text-gray-500">RON</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

@@ -16,9 +16,11 @@ interface MenuStatus {
   reason: string | null;
 }
 
+type CourseType = "non-veg" | "veg" | "none";
+
 interface DraftOrder {
-  soupType: "non-veg" | "veg";
-  mainType: "non-veg" | "veg";
+  soupType: CourseType;
+  mainType: CourseType;
   note: string;
   qty: number;
 }
@@ -29,41 +31,61 @@ interface DraftOrder {
 
 /**
  * Derive the stored MenuType from soup/main selections and optional note.
- * - soup !== main  → "custom"
- * - note non-empty → "custom"
- * - otherwise      → whichever type was selected (they're equal)
+ * - soup="none", main set  → "main-only"
+ * - main="none", soup set  → "soup-only"
+ * - soup !== main          → "custom"
+ * - note non-empty         → "custom"
+ * - otherwise              → whichever type was selected (they're equal)
  */
 function effectiveMenuType(
-  soupType: "non-veg" | "veg",
-  mainType: "non-veg" | "veg",
+  soupType: CourseType,
+  mainType: CourseType,
   note: string,
 ): MenuType {
+  if (soupType === "none" && mainType !== "none") return "main-only";
+  if (mainType === "none" && soupType !== "none") return "soup-only";
+  if (soupType === "none" && mainType === "none") return "custom"; // both none — degenerate
   if (note.trim() || soupType !== mainType) return "custom";
-  return soupType;
+  return soupType as MenuType; // soupType is "non-veg" | "veg" here — "none" cases handled above
+}
+
+/** Human-readable label for a single course type. */
+function courseLabel(type: CourseType, tOrder: (k: string) => string): string {
+  if (type === "non-veg") return tOrder("menu_type_nonveg");
+  if (type === "veg") return tOrder("menu_type_veg");
+  return tOrder("menu_type_none");
 }
 
 /**
- * For display in summary / placed-order rows: describe the courses when mixed.
- * Returns e.g. "Carne supă / Vegetarian fel principal" or just the type label.
+ * For display in summary / placed-order rows: describe the courses.
+ * Returns the appropriate typeLabel based on effectiveMenuType logic.
  */
 function courseDescription(
-  soupType: "non-veg" | "veg",
-  mainType: "non-veg" | "veg",
+  soupType: CourseType,
+  mainType: CourseType,
   tOrder: (k: string) => string,
 ): { mixed: boolean; soupLabel: string; mainLabel: string; typeLabel: string } {
-  const labels: Record<"non-veg" | "veg", string> = {
-    "non-veg": tOrder("menu_type_nonveg"),
-    veg: tOrder("menu_type_veg"),
-  };
-  if (soupType !== mainType) {
+  const mt = effectiveMenuType(soupType, mainType, ""); // note excluded — caller shows it separately
+
+  if (mt === "soup-only") {
+    const typeLabel = soupType === "veg" ? tOrder("menu_type_soup_veg") : tOrder("menu_type_soup_nonveg");
+    return { mixed: false, soupLabel: courseLabel(soupType, tOrder), mainLabel: tOrder("menu_type_none"), typeLabel };
+  }
+  if (mt === "main-only") {
+    const typeLabel = mainType === "veg" ? tOrder("menu_type_main_veg") : tOrder("menu_type_main_nonveg");
+    return { mixed: false, soupLabel: tOrder("menu_type_none"), mainLabel: courseLabel(mainType, tOrder), typeLabel };
+  }
+  if (mt === "custom") {
     return {
       mixed: true,
-      soupLabel: labels[soupType],
-      mainLabel: labels[mainType],
+      soupLabel: courseLabel(soupType, tOrder),
+      mainLabel: courseLabel(mainType, tOrder),
       typeLabel: tOrder("menu_type_custom"),
     };
   }
-  return { mixed: false, soupLabel: labels[soupType], mainLabel: labels[mainType], typeLabel: labels[soupType] };
+  // veg or non-veg — both courses same type
+  const label = courseLabel(soupType, tOrder);
+  return { mixed: false, soupLabel: label, mainLabel: label, typeLabel: label };
 }
 
 // ---------------------------------------------------------------------------
@@ -161,33 +183,35 @@ function QuantitySelector({
   );
 }
 
-/** Two-button toggle (non-veg / veg) for a single course row. */
+/** Three-button toggle (non-veg / veg / none) for a single course row. */
 function CourseToggle({
   label,
   value,
   onChange,
 }: {
   label: string;
-  value: "non-veg" | "veg";
-  onChange: (v: "non-veg" | "veg") => void;
+  value: CourseType;
+  onChange: (v: CourseType) => void;
 }) {
   const t = useTranslations("order");
   return (
     <div className="flex items-center gap-3">
       <span className="text-sm font-medium text-gray-700 w-28 shrink-0">{label}</span>
       <div className="flex flex-1 gap-2">
-        {(["non-veg", "veg"] as const).map((mt) => (
+        {(["non-veg", "veg", "none"] as const).map((mt) => (
           <button
             key={mt}
             type="button"
             onClick={() => onChange(mt)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
               value === mt
-                ? "bg-brand-500 text-white border-brand-500"
+                ? mt === "none"
+                  ? "bg-gray-400 text-white border-gray-400"
+                  : "bg-brand-500 text-white border-brand-500"
                 : "border-gray-300 text-gray-700 hover:border-brand-400 hover:text-brand-600"
             }`}
           >
-            {mt === "non-veg" ? t("menu_type_nonveg") : t("menu_type_veg")}
+            {mt === "non-veg" ? t("menu_type_nonveg") : mt === "veg" ? t("menu_type_veg") : t("menu_type_none")}
           </button>
         ))}
       </div>
@@ -205,8 +229,8 @@ function OrderSummaryRow({
 }) {
   const t = useTranslations("order");
   const { mixed, soupLabel, mainLabel, typeLabel } = courseDescription(
-    draft.soupType,
-    draft.mainType,
+    draft.soupType as CourseType,
+    draft.mainType as CourseType,
     t,
   );
 
@@ -255,18 +279,23 @@ function PlacedOrderRow({
 }) {
   const t = useTranslations("order");
 
-  // Decode stored soupType/mainType from soup/main fields (stored as type labels) or fall back
-  const soupType = (order.soup === "veg" ? "veg" : order.soup === "non-veg" ? "non-veg" : null);
-  const mainType = (order.main === "veg" ? "veg" : order.main === "non-veg" ? "non-veg" : null);
+  // Decode stored soupType/mainType from soup/main fields
+  const soupType: CourseType = order.soup === "veg" ? "veg" : order.soup === "none" ? "none" : "non-veg";
+  const mainType: CourseType = order.main === "veg" ? "veg" : order.main === "none" ? "none" : "non-veg";
 
   const typeLabel =
     order.menuType === "non-veg"
       ? t("menu_type_nonveg")
       : order.menuType === "veg"
         ? t("menu_type_veg")
-        : t("menu_type_custom");
+        : order.menuType === "soup-only"
+          ? (soupType === "veg" ? t("menu_type_soup_veg") : t("menu_type_soup_nonveg"))
+          : order.menuType === "main-only"
+            ? (mainType === "veg" ? t("menu_type_main_veg") : t("menu_type_main_nonveg"))
+            : t("menu_type_custom");
 
-  const mixed = soupType !== null && mainType !== null && soupType !== mainType;
+  // Only show the soup/main breakdown for fully custom orders (mismatched types + note)
+  const mixed = order.menuType === "custom";
 
   return (
     <div className="py-3 border-b border-gray-100 last:border-0">
@@ -280,9 +309,9 @@ function PlacedOrderRow({
           </div>
           {mixed && (
             <div className="text-xs text-gray-500">
-              {t("soup")}: <span className="font-medium text-gray-700">{soupType === "non-veg" ? t("menu_type_nonveg") : t("menu_type_veg")}</span>
+              {t("soup")}: <span className="font-medium text-gray-700">{courseLabel(soupType, t)}</span>
               {" · "}
-              {t("main")}: <span className="font-medium text-gray-700">{mainType === "non-veg" ? t("menu_type_nonveg") : t("menu_type_veg")}</span>
+              {t("main")}: <span className="font-medium text-gray-700">{courseLabel(mainType, t)}</span>
             </div>
           )}
           {order.note && (
@@ -331,8 +360,8 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
   const [nicknameReady, setNicknameReady] = useState(false);
 
   const [draft, setDraft] = useState<DraftOrder>({
-    soupType: "non-veg",
-    mainType: "non-veg",
+    soupType: "non-veg" as CourseType,
+    mainType: "non-veg" as CourseType,
     note: "",
     qty: 1,
   });
@@ -343,6 +372,10 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Tip — one per nickname per day; default 1 RON, loaded from server once nickname is known
+  const [tip, setTip] = useState<number>(1);
+  const [tipInput, setTipInput] = useState<string>("1"); // string for controlled input
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -372,6 +405,29 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
   useEffect(() => {
     if (nicknameReady && nickname) loadMyOrders(nickname);
   }, [nicknameReady, nickname, loadMyOrders]);
+
+  // Load today's tip for this nickname (falls back to default 1 if not yet set)
+  useEffect(() => {
+    if (!nickname) return;
+    fetch(`/api/tip?nickname=${encodeURIComponent(nickname)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.tip !== undefined) {
+          setTip(data.tip);
+          setTipInput(String(data.tip));
+        }
+      })
+      .catch(() => {});
+  }, [nickname]);
+
+  async function saveTip(amount: number) {
+    if (!nickname) return;
+    await fetch("/api/tip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname, tip: amount }),
+    }).catch(() => {});
+  }
 
   function handleNicknameSave(nick: string) {
     localStorage.setItem(NICKNAME_KEY, nick);
@@ -418,6 +474,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
           return;
         }
       }
+      await saveTip(tip);
       setPendingItems([]);
       await loadMyOrders(nickname);
       setToast(t("order_placed"));
@@ -430,8 +487,8 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
     setSubmitting(true);
     setError(null);
     try {
-      const soupType: "non-veg" | "veg" = order.soup === "veg" ? "veg" : "non-veg";
-      const mainType: "non-veg" | "veg" = order.main === "veg" ? "veg" : "non-veg";
+      const soupType: CourseType = order.soup === "veg" ? "veg" : order.soup === "none" ? "none" : "non-veg";
+      const mainType: CourseType = order.main === "veg" ? "veg" : order.main === "none" ? "none" : "non-veg";
       const body = {
         nickname,
         menuType: effectiveMenuType(soupType, mainType, order.note ?? ""),
@@ -558,7 +615,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                 </div>
               </div>
 
-              {/* Per-course overrides */}
+              {/* Per-course overrides (including "none" to skip a course) */}
               <div className="flex flex-col gap-2 border-t border-gray-100 pt-3">
                 <p className="text-xs text-gray-400">{t("mix_courses")}</p>
                 <CourseToggle
@@ -573,12 +630,26 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                 />
               </div>
 
-              {/* Mixed indicator */}
-              {draft.soupType !== draft.mainType && (
-                <p className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
-                  {t("menu_type_custom")}
-                </p>
-              )}
+              {/* Single-course / custom indicator */}
+              {(() => {
+                const mt = effectiveMenuType(draft.soupType, draft.mainType, draft.note);
+                if (mt === "soup-only") return (
+                  <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    {draft.soupType === "veg" ? t("menu_type_soup_veg") : t("menu_type_soup_nonveg")}
+                  </p>
+                );
+                if (mt === "main-only") return (
+                  <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    {draft.mainType === "veg" ? t("menu_type_main_veg") : t("menu_type_main_nonveg")}
+                  </p>
+                );
+                if (mt === "custom") return (
+                  <p className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                    {t("menu_type_custom")}
+                  </p>
+                );
+                return null;
+              })()}
 
               {/* Special request note */}
               <div className="flex flex-col gap-1.5">
@@ -631,6 +702,31 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                   }
                 />
               ))}
+              {/* Tip selector */}
+              <div className="mt-3 pt-3 border-t border-brand-100 flex items-center justify-between gap-3">
+                <label htmlFor="tip-input" className="text-sm text-brand-800 font-medium">
+                  {t("tip_label")}
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    id="tip-input"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="0"
+                    value={tip === 0 ? "" : tipInput}
+                    onChange={(e) => {
+                      setTipInput(e.target.value);
+                      const parsed = e.target.value === "" ? 0 : Math.max(0, Number(e.target.value));
+                      setTip(parsed);
+                      saveTip(parsed);
+                    }}
+                    className="w-20 rounded-lg border border-brand-300 bg-white px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  />
+                  <span className="text-xs text-brand-700">RON</span>
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={handleConfirmOrder}
@@ -680,6 +776,12 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                 />
               ),
             )}
+          {!ordersLoading && myOrders.length > 0 && tip > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
+              <span className="text-gray-500">{t("tip_applied")}</span>
+              <span className="font-semibold text-yellow-600">{tip} RON</span>
+            </div>
+          )}
         </section>
       )}
 
@@ -717,10 +819,10 @@ function EditOrderForm({
   const t = useTranslations("order");
 
   // Decode soupType/mainType from stored soup/main fields
-  const soupType: "non-veg" | "veg" = order.soup === "veg" ? "veg" : "non-veg";
-  const mainType: "non-veg" | "veg" = order.main === "veg" ? "veg" : "non-veg";
+  const soupType: CourseType = order.soup === "veg" ? "veg" : order.soup === "none" ? "none" : "non-veg";
+  const mainType: CourseType = order.main === "veg" ? "veg" : order.main === "none" ? "none" : "non-veg";
 
-  function setSoupType(v: "non-veg" | "veg") {
+  function setSoupType(v: CourseType) {
     onChange({
       ...order,
       soup: v,
@@ -728,7 +830,7 @@ function EditOrderForm({
     });
   }
 
-  function setMainType(v: "non-veg" | "veg") {
+  function setMainType(v: CourseType) {
     onChange({
       ...order,
       main: v,
@@ -781,11 +883,25 @@ function EditOrderForm({
         <CourseToggle label={t("main")} value={mainType} onChange={setMainType} />
       </div>
 
-      {soupType !== mainType && (
-        <p className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
-          {t("menu_type_custom")}
-        </p>
-      )}
+      {(() => {
+        const mt = effectiveMenuType(soupType, mainType, order.note ?? "");
+        if (mt === "soup-only") return (
+          <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+            {t("menu_type_soup_only")}
+          </p>
+        );
+        if (mt === "main-only") return (
+          <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+            {t("menu_type_main_only")}
+          </p>
+        );
+        if (mt === "custom") return (
+          <p className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+            {t("menu_type_custom")}
+          </p>
+        );
+        return null;
+      })()}
 
       <input
         type="text"

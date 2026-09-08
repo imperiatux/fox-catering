@@ -39,6 +39,12 @@ export async function PATCH(request: NextRequest) {
   if (body.whatsappPhone !== undefined && typeof body.whatsappPhone !== "string") {
     return NextResponse.json({ error: "whatsappPhone must be a string" }, { status: 400 });
   }
+  for (const key of ["priceNonVeg", "priceVeg", "priceSoupNonVeg", "priceSoupVeg", "priceMainNonVeg", "priceMainVeg", "priceCustom"] as const) {
+    const val = body[key];
+    if (val !== undefined && (typeof val !== "number" || val < 0 || !isFinite(val))) {
+      return NextResponse.json({ error: `${key} must be a non-negative number` }, { status: 400 });
+    }
+  }
 
   const updated = await setSettings(body);
   return NextResponse.json(updated);
