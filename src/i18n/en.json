@@ -46,6 +46,7 @@
     "note_optional": "optional",
     "note_placeholder": "e.g. no potatoes",
     "mix_courses": "or mix courses individually",
+    "select_course_hint": "Select at least one course.",
     "tip": "Tip",
     "tip_label": "Add a tip (RON)",
     "tip_applied": "Tip included",

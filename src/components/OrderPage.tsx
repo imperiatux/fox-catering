@@ -44,7 +44,10 @@ function effectiveMenuType(
 ): MenuType {
   if (soupType === "none" && mainType !== "none") return "main-only";
   if (mainType === "none" && soupType !== "none") return "soup-only";
-  if (soupType === "none" && mainType === "none") return "custom"; // both none — degenerate
+  if (soupType === "none" && mainType === "none") {
+    // Both none: only a note makes this a meaningful custom order; otherwise invalid selection.
+    return "custom";
+  }
   if (note.trim() || soupType !== mainType) return "custom";
   return soupType as MenuType; // soupType is "non-veg" | "veg" here — "none" cases handled above
 }
@@ -632,7 +635,13 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
 
               {/* Single-course / custom indicator */}
               {(() => {
+                const bothNone = draft.soupType === "none" && draft.mainType === "none";
                 const mt = effectiveMenuType(draft.soupType, draft.mainType, draft.note);
+                if (bothNone && !draft.note.trim()) return (
+                  <p className="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    {t("select_course_hint")}
+                  </p>
+                );
                 if (mt === "soup-only") return (
                   <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
                     {draft.soupType === "veg" ? t("menu_type_soup_veg") : t("menu_type_soup_nonveg")}
@@ -652,20 +661,26 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
               })()}
 
               {/* Special request note */}
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="note-input" className="text-sm font-medium text-gray-700">
-                  {t("note")}
-                  <span className="text-gray-400 font-normal ml-1 text-xs">({t("note_optional")})</span>
-                </label>
-                <input
-                  id="note-input"
-                  type="text"
-                  value={draft.note}
-                  onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
-                  placeholder={t("note_placeholder")}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                />
-              </div>
+              {(() => {
+                const bothNoneNote = draft.soupType === "none" && draft.mainType === "none";
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="note-input" className={`text-sm font-medium ${bothNoneNote ? "text-gray-400" : "text-gray-700"}`}>
+                      {t("note")}
+                      <span className="text-gray-400 font-normal ml-1 text-xs">({t("note_optional")})</span>
+                    </label>
+                    <input
+                      id="note-input"
+                      type="text"
+                      disabled={bothNoneNote}
+                      value={draft.note}
+                      onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
+                      placeholder={t("note_placeholder")}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                );
+              })()}
 
               {/* Quantity */}
               <QuantitySelector
@@ -682,7 +697,8 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
               <button
                 type="button"
                 onClick={handleAddToOrder}
-                className="bg-brand-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-brand-600 text-sm"
+                disabled={draft.soupType === "none" && draft.mainType === "none"}
+                className="bg-brand-500 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-brand-600 disabled:opacity-40 text-sm"
               >
                 {t("add_to_order")}
               </button>
