@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
 
   const date = localDateString();
   const all = await getOrders(date);
-  const mine = all.filter((o) => o.nickname === nickname);
+  // Strip admin-only fields before returning to the public client
+  const mine = all
+    .filter((o) => o.nickname === nickname)
+    .map(({ ip: _ip, country: _country, ...rest }) => rest);
 
   return NextResponse.json(mine);
 }
@@ -103,6 +106,27 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // --- Capture IP and resolve country ---
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    undefined;
+
+  let country: string | undefined;
+  if (ip && ip !== "127.0.0.1" && ip !== "::1") {
+    try {
+      const geo = await fetch(`http://ip-api.com/json/${ip}?fields=country`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (geo.ok) {
+        const data = await geo.json() as { country?: string };
+        country = data.country ?? undefined;
+      }
+    } catch {
+      // geo lookup is best-effort — never block the order
+    }
+  }
+
   // --- Persist ---
   const date = localDateString();
   const order: Order = {
@@ -114,10 +138,15 @@ export async function POST(request: NextRequest) {
     ...(note ? { note } : {}),
     qty,
     tip,
+    ...(ip      ? { ip }      : {}),
+    ...(country ? { country } : {}),
     createdAt: now.toISOString(),
   };
 
   await addOrder(date, order);
 
-  return NextResponse.json(order, { status: 201 });
+  // Return order without IP/country to the client (admin-only fields)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { ip: _ip, country: _country, ...publicOrder } = order;
+  return NextResponse.json(publicOrder, { status: 201 });
 }

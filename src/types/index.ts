@@ -14,6 +14,8 @@ export interface Order {
   note?: string;
   qty: number;
   tip?: number;
+  ip?: string;
+  country?: string;
   createdAt: string;
 }
 

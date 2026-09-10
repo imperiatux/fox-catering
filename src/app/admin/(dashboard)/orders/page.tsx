@@ -393,6 +393,9 @@ function OrderTable({
             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">
               {tOrder("tip")}
             </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              {tOrder("ip_country")}
+            </th>
             <th className="px-4 py-3 w-16" />
           </tr>
         </thead>
@@ -437,6 +440,18 @@ function OrderTable({
                   <span className="font-semibold text-yellow-600">{orderTip} RON</span>
                 ) : (
                   <span className="text-gray-300">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-xs text-gray-400 font-mono">
+                {order.ip ? (
+                  <span>
+                    {order.ip}
+                    {order.country && (
+                      <span className="ml-1 not-italic font-sans text-gray-500">({order.country})</span>
+                    )}
+                  </span>
+                ) : (
+                  <span>—</span>
                 )}
               </td>
               <td className="px-4 py-3 text-right">
