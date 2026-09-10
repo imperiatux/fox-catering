@@ -171,6 +171,11 @@ export async function setTip(date: string, nickname: string, tip: number): Promi
   await redis.hset(`tips:${date}`, nickname, String(tip));
 }
 
+/** Removes the tip entry for the given nickname (called when all their orders are deleted). */
+export async function deleteTip(date: string, nickname: string): Promise<void> {
+  await redis.hdel(`tips:${date}`, nickname);
+}
+
 /** Returns the sum of all tips for a given date. */
 export async function getTipsTotal(date: string): Promise<number> {
   const all = await redis.hgetall(`tips:${date}`);

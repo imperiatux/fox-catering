@@ -531,6 +531,14 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         return;
       }
       await loadMyOrders(nickname);
+      // If no orders remain, reset the tip UI to the default so the next order starts fresh.
+      setMyOrders((prev) => {
+        if (prev.length === 0) {
+          setTip(1);
+          setTipInput("1");
+        }
+        return prev;
+      });
       setToast(t("order_deleted"));
     } finally {
       setSubmitting(false);
