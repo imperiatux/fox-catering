@@ -48,7 +48,7 @@
     "mix_courses": "or mix courses individually",
     "select_course_hint": "Select at least one course.",
     "tip": "Tip",
-    "tip_label": "Add a tip (RON) (total)",
+    "tip_label": "Tip (RON)",
     "tip_applied": "Tip included",
     "order_total": "Total",
     "order_placed": "Order placed!",

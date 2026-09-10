@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import type { Order, MenuType } from "@/types";
 
@@ -49,6 +49,7 @@ interface DraftOrder {
   mainType: CourseType;
   note: string;
   qty: number;
+  tip: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,9 +253,11 @@ function CourseToggle({
 function OrderSummaryRow({
   draft,
   onRemove,
+  onTipChange,
 }: {
   draft: DraftOrder;
   onRemove: () => void;
+  onTipChange: (tip: number) => void;
 }) {
   const t = useTranslations("order");
   const { mixed, soupLabel, mainLabel, typeLabel } = courseDescription(
@@ -264,34 +267,49 @@ function OrderSummaryRow({
   );
 
   return (
-    <div className="flex items-start justify-between gap-4 py-3 border-b border-gray-100 last:border-0">
-      <div className="text-sm space-y-0.5">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="font-bold text-gray-900">{draft.qty}×</span>
-          <span className="inline-block bg-brand-100 text-brand-700 text-xs font-medium px-2 py-0.5 rounded-full">
-            {typeLabel}
-          </span>
+    <div className="py-3 border-b border-gray-100 last:border-0">
+      <div className="flex items-start justify-between gap-4">
+        <div className="text-sm space-y-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold text-gray-900">{draft.qty}×</span>
+            <span className="inline-block bg-brand-100 text-brand-700 text-xs font-medium px-2 py-0.5 rounded-full">
+              {typeLabel}
+            </span>
+          </div>
+          {mixed && (
+            <div className="text-xs text-gray-500">
+              {t("soup")}: <span className="font-medium text-gray-700">{soupLabel}</span>
+              {" · "}
+              {t("main")}: <span className="font-medium text-gray-700">{mainLabel}</span>
+            </div>
+          )}
+          {draft.note && (
+            <div className="text-gray-500 italic text-xs">
+              {t("note")}: {draft.note}
+            </div>
+          )}
         </div>
-        {mixed && (
-          <div className="text-xs text-gray-500">
-            {t("soup")}: <span className="font-medium text-gray-700">{soupLabel}</span>
-            {" · "}
-            {t("main")}: <span className="font-medium text-gray-700">{mainLabel}</span>
-          </div>
-        )}
-        {draft.note && (
-          <div className="text-gray-500 italic text-xs">
-            {t("note")}: {draft.note}
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-red-500 hover:text-red-700 text-xs font-medium shrink-0 mt-0.5"
+        >
+          {t("cancel")}
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="text-red-500 hover:text-red-700 text-xs font-medium shrink-0 mt-0.5"
-      >
-        {t("cancel")}
-      </button>
+      {/* Per-item tip */}
+      <div className="mt-1.5 flex items-center gap-2">
+        <span className="text-xs text-brand-700">{t("tip_label")}</span>
+        <input
+          type="number"
+          min={0}
+          step={0.5}
+          value={draft.tip}
+          onChange={(e) => onTipChange(e.target.value === "" ? 0 : Math.max(0, Number(e.target.value)))}
+          className="w-16 rounded-lg border border-brand-300 bg-white px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+        />
+        <span className="text-xs text-brand-600">RON</span>
+      </div>
     </div>
   );
 }
@@ -348,6 +366,11 @@ function PlacedOrderRow({
               {t("note")}: {order.note}
             </div>
           )}
+          {(order.tip ?? 0) > 0 && (
+            <div className="text-xs text-yellow-600">
+              {t("tip_applied")}: <span className="font-semibold">{order.tip} RON</span>
+            </div>
+          )}
         </div>
         {(onEdit || onDelete) && (
           <div className="flex gap-3 shrink-0 mt-0.5">
@@ -393,6 +416,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
     mainType: "non-veg" as CourseType,
     note: "",
     qty: 1,
+    tip: 1,
   });
 
   const [pendingItems, setPendingItems] = useState<DraftOrder[]>([]);
@@ -401,14 +425,6 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Tip — 1 RON per menu ordered; user can override. Driven directly from `tip` number state.
-  const [tip, setTip] = useState<number>(0);
-
-  /** Compute tip default from a list of orders: 1 RON × total qty. */
-  function defaultTipForOrders(orders: Order[]): number {
-    return orders.reduce((s, o) => s + o.qty, 0);
-  }
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -444,30 +460,6 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
     if (nicknameReady && nickname) loadMyOrders(nickname);
   }, [nicknameReady, nickname, loadMyOrders]);
 
-  // Keep tip in sync with projected default (1 RON × total qty) whenever
-  // pending items or confirmed orders change. Only auto-updates when the
-  // current tip exactly matches the previous auto-default — manual overrides
-  // are preserved by setting prevProjectedQtyRef to -1 on manual input.
-  const prevProjectedQtyRef = useRef<number>(0);
-  useEffect(() => {
-    const confirmedQty = myOrders.reduce((s, o) => s + o.qty, 0);
-    const pendingQty   = pendingItems.reduce((s, i) => s + i.qty, 0);
-    const projected    = confirmedQty + pendingQty;
-    if (tip === prevProjectedQtyRef.current) {
-      setTip(projected);
-    }
-    prevProjectedQtyRef.current = projected;
-  }, [myOrders, pendingItems]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function saveTip(amount: number) {
-    if (!nickname) return;
-    await fetch("/api/tip", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname, tip: amount }),
-    }).catch(() => {});
-  }
-
   function handleNicknameSave(nick: string) {
     localStorage.setItem(NICKNAME_KEY, nick);
     setNickname(nick);
@@ -476,7 +468,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
   function handleAddToOrder() {
     setError(null);
     setPendingItems((prev) => [...prev, { ...draft }]);
-    setDraft({ soupType: draft.soupType, mainType: draft.mainType, note: "", qty: 1 });
+    setDraft({ soupType: draft.soupType, mainType: draft.mainType, note: "", qty: 1, tip: 1 });
   }
 
   async function handleConfirmOrder() {
@@ -488,11 +480,11 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         const body = {
           nickname,
           menuType: effectiveMenuType(item.soupType, item.mainType, item.note),
-          // store soupType/mainType in soup/main fields so admin & edit can decode them
           soup: item.soupType,
           main: item.mainType,
           note: item.note.trim() || undefined,
           qty: item.qty,
+          tip: item.tip,
         };
         const res = await fetch("/api/orders", {
           method: "POST",
@@ -514,11 +506,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         }
       }
       setPendingItems([]);
-      const updatedOrders = await loadMyOrders(nickname);
-      const newTip = defaultTipForOrders(updatedOrders);
-      setTip(newTip);
-      prevProjectedQtyRef.current = newTip;
-      await saveTip(newTip);
+      await loadMyOrders(nickname);
       setToast(t("order_placed"));
     } finally {
       setSubmitting(false);
@@ -538,6 +526,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         main: mainType,
         note: order.note?.trim() || undefined,
         qty: order.qty,
+        tip: order.tip ?? 0,
       };
       const res = await fetch(`/api/orders/${order.id}`, {
         method: "PATCH",
@@ -549,11 +538,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         return;
       }
       setEditingOrder(null);
-      const updatedOrders = await loadMyOrders(nickname);
-      const newTip = defaultTipForOrders(updatedOrders);
-      setTip(newTip);
-      prevProjectedQtyRef.current = newTip;
-      await saveTip(newTip);
+      await loadMyOrders(nickname);
       setToast(t("order_saved"));
     } finally {
       setSubmitting(false);
@@ -573,11 +558,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         setError(tErr("generic"));
         return;
       }
-      const updatedOrders = await loadMyOrders(nickname);
-      const newTip = defaultTipForOrders(updatedOrders); // 0 when no orders remain
-      setTip(newTip);
-      prevProjectedQtyRef.current = newTip;
-      await saveTip(newTip);
+      await loadMyOrders(nickname);
       setToast(t("order_deleted"));
     } finally {
       setSubmitting(false);
@@ -732,7 +713,7 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
               {/* Quantity */}
               <QuantitySelector
                 qty={draft.qty}
-                onChange={(qty) => setDraft((d) => ({ ...d, qty }))}
+                onChange={(qty) => setDraft((d) => ({ ...d, qty, tip: qty }))}
               />
 
               {error && (
@@ -763,32 +744,13 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                   onRemove={() =>
                     setPendingItems((prev) => prev.filter((_, i) => i !== idx))
                   }
+                  onTipChange={(newTip) =>
+                    setPendingItems((prev) =>
+                      prev.map((it, i) => i === idx ? { ...it, tip: newTip } : it)
+                    )
+                  }
                 />
               ))}
-              {/* Tip selector — default is 1 RON × (confirmed + pending) qty */}
-              {/* Tip selector — default is 1 RON × (confirmed + pending) qty */}
-              <div className="mt-3 pt-3 border-t border-brand-100 flex items-center justify-between gap-3">
-                <label htmlFor="tip-input" className="text-sm text-brand-800 font-medium">
-                  {t("tip_label")}
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    id="tip-input"
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={tip}
-                    onChange={(e) => {
-                      const parsed = e.target.value === "" ? 0 : Math.max(0, Number(e.target.value));
-                      setTip(parsed);
-                      // Mark as manually overridden so the auto-sync doesn't clobber it.
-                      prevProjectedQtyRef.current = -1;
-                    }}
-                    className="w-20 rounded-lg border border-brand-300 bg-white px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                  />
-                  <span className="text-xs text-brand-700">RON</span>
-                </div>
-              </div>
 
               <button
                 type="button"
@@ -839,18 +801,13 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                 />
               ),
             )}
-          {!ordersLoading && myOrders.length > 0 && tip > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
-              <span className="text-gray-500">{t("tip_applied")}</span>
-              <span className="font-semibold text-yellow-600">{tip} RON</span>
-            </div>
-          )}
           {!ordersLoading && myOrders.length > 0 && (() => {
             const prices = menu.prices ?? ZERO_PRICES;
             const hasPrices = Object.values(prices).some((v) => v > 0);
             if (!hasPrices) return null;
             const menuSubtotal = myOrders.reduce((sum, o) => sum + orderPrice(o, prices), 0);
-            const total = menuSubtotal + tip;
+            const tipsSubtotal = myOrders.reduce((sum, o) => sum + (o.tip ?? 0), 0);
+            const total = menuSubtotal + tipsSubtotal;
             if (total === 0) return null;
             return (
               <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between text-sm font-semibold">

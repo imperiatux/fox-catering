@@ -139,9 +139,6 @@ export default function AdminOrdersPage() {
       });
     }
 
-    const total = nonVegCount + vegCount + soupOnly + mainOnly + customCount;
-    lines.push(`\n${t("whatsapp_total")}: ${total}`);
-
     const message = lines.join("\n");
     const phone = "+4" + settings.whatsappPhone.replace(/[^0-9]/g, "");
     window.open(
@@ -296,8 +293,8 @@ export default function AdminOrdersPage() {
           <p className="mt-2 text-4xl font-bold text-brand-500">
             {nonVegCount + vegCount + soupOnly + mainOnly + customCount}
           </p>
-          {(hasPrices || tipsTotal > 0) && orderTotal > 0 && (
-            <p className="mt-1 text-xs font-semibold text-brand-600">{orderTotal.toFixed(2)} RON</p>
+          {hasPrices && menuTotal > 0 && (
+            <p className="mt-1 text-xs font-semibold text-brand-600">{menuTotal.toFixed(2)} RON</p>
           )}
         </div>
       </div>
@@ -318,7 +315,6 @@ export default function AdminOrdersPage() {
         ) : (
           <OrderTable
             orders={customOrders}
-            tips={tips}
             deletingId={deletingId}
             onDelete={handleDelete}
             t={t}
@@ -351,7 +347,6 @@ export default function AdminOrdersPage() {
           ) : (
             <OrderTable
               orders={orders}
-              tips={tips}
               deletingId={deletingId}
               onDelete={handleDelete}
               t={t}
@@ -367,22 +362,17 @@ export default function AdminOrdersPage() {
 // Extracted reusable table component
 function OrderTable({
   orders,
-  tips,
   deletingId,
   onDelete,
   t,
   tOrder,
 }: {
   orders: Order[];
-  tips: Record<string, number>;
   deletingId: string | null;
   onDelete: (id: string) => void;
   t: (key: string) => string;
   tOrder: (key: string) => string;
 }) {
-  // Track which nicknames have already had their tip shown
-  const shownNicknames = new Set<string>();
-
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
       <table className="min-w-full divide-y divide-gray-200 bg-white text-sm">
@@ -408,9 +398,7 @@ function OrderTable({
         </thead>
         <tbody className="divide-y divide-gray-100">
           {orders.map((order) => {
-            const isFirstForNick = !shownNicknames.has(order.nickname);
-            if (isFirstForNick) shownNicknames.add(order.nickname);
-            const nickTip = tips[order.nickname] ?? 0;
+            const orderTip = order.tip ?? 0;
             return (
             <tr key={order.id} className="hover:bg-gray-50">
               <td className="px-4 py-3 font-semibold text-gray-900">
@@ -445,8 +433,8 @@ function OrderTable({
                 {order.qty}
               </td>
               <td className="px-4 py-3 text-right text-xs">
-                {isFirstForNick && nickTip > 0 ? (
-                  <span className="font-semibold text-yellow-600">{nickTip} RON</span>
+                {orderTip > 0 ? (
+                  <span className="font-semibold text-yellow-600">{orderTip} RON</span>
                 ) : (
                   <span className="text-gray-300">—</span>
                 )}

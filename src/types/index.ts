@@ -13,6 +13,7 @@ export interface Order {
   main: string;
   note?: string;
   qty: number;
+  tip?: number;
   createdAt: string;
 }
 

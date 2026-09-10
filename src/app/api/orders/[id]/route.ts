@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrders, deleteOrder, updateOrder, setTip, deleteTip, localDateString } from "@/lib/redis";
+import { getOrders, deleteOrder, updateOrder, localDateString } from "@/lib/redis";
 import type { MenuType } from "@/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -36,17 +36,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   }
 
   await deleteOrder(date, id);
-
-  // Recalculate tip (1 RON × remaining qty); clear entirely if no orders left.
-  const remaining = await getOrders(date);
-  const nickOrders = remaining.filter((o) => o.nickname === nickname);
-  if (nickOrders.length === 0) {
-    await deleteTip(date, nickname);
-  } else {
-    const newTip = nickOrders.reduce((s, o) => s + o.qty, 0);
-    await setTip(date, nickname, newTip);
-  }
-
   return new NextResponse(null, { status: 204 });
 }
 
@@ -65,6 +54,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     main?: unknown;
     note?: unknown;
     qty?: unknown;
+    tip?: unknown;
   };
   try {
     body = await request.json();
@@ -118,6 +108,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "qty must be a positive integer" }, { status: 400 });
     }
     patch.qty = qty;
+  }
+  if (body.tip !== undefined) {
+    const tip = Number(body.tip);
+    if (!isFinite(tip) || tip < 0) {
+      return NextResponse.json({ error: "tip must be a non-negative number" }, { status: 400 });
+    }
+    patch.tip = tip;
   }
 
   const updated = await updateOrder(date, id, patch);

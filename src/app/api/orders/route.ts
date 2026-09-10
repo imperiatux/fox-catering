@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     main?: unknown;
     note?: unknown;
     qty?: unknown;
+    tip?: unknown;
   };
   try {
     body = await request.json();
@@ -73,6 +74,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "qty must be a positive integer" }, { status: 400 });
   }
 
+  const tip = body.tip !== undefined ? Number(body.tip) : qty; // default 1 RON per item
+  if (!isFinite(tip) || tip < 0) {
+    return NextResponse.json({ error: "tip must be a non-negative number" }, { status: 400 });
+  }
+
   // --- Settings / cutoff / photo check ---
   const [settings, menuPhoto] = await Promise.all([
     getSettings(),
@@ -107,6 +113,7 @@ export async function POST(request: NextRequest) {
     main,
     ...(note ? { note } : {}),
     qty,
+    tip,
     createdAt: now.toISOString(),
   };
 
