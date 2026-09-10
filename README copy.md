@@ -10,18 +10,18 @@ Built with **Next.js 16 (App Router)**, **Redis**, **Tailwind CSS**, and **Docke
 
 ### Public order page
 - Today's menu photo displayed full-width
-- Quick toggle: **Meniul zilei** (non-veg) or **Vegetarian** — sets both courses at once
-- Per-course overrides: mix **Felul 1** and **Felul 2** independently (auto-flagged as **Personalizat**)
+- Quick toggle: **Carne** (non-veg) or **Vegetarian** — sets both courses at once
+- Per-course overrides: mix soup and main independently (auto-flagged as **Personalizat**)
 - Special request note (free text)
 - Quantity selector
 - Order summary → confirm flow
-- Edit / delete own orders for today *(hidden after cutoff — orders become read-only)*
+- Edit / delete own orders for today
 - Nickname saved in `localStorage`
 - Romanian / English flag switcher (🇷🇴 / 🇬🇧)
 
 ### Admin panel
 - **Menu upload** — drag & drop, file picker, or paste from clipboard (`Ctrl+V`)
-- **Orders** — live summary counts (Meniul zilei / Vegetarian / Personalizat / Total), custom order detail, full order table toggle, auto-refresh every 30 s
+- **Orders** — live summary counts (Carne / Vegetarian / Personalizat / Total), custom order detail, full order table toggle, auto-refresh every 30 s
 - **Send via WhatsApp** — one-tap button builds a localised order message and opens `wa.me`
 - **Settings** — order cutoff time, toggle cutoff on/off, active weekdays (Mon–Sun), catering WhatsApp number
 - Session-based login (HTTP-only cookie, 8 h TTL)
