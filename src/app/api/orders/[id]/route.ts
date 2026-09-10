@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrders, deleteOrder, updateOrder, deleteTip, localDateString } from "@/lib/redis";
+import { getOrders, deleteOrder, updateOrder, setTip, deleteTip, localDateString } from "@/lib/redis";
 import type { MenuType } from "@/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -37,11 +37,14 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   await deleteOrder(date, id);
 
-  // If the nickname has no remaining orders today, remove their tip too.
+  // Recalculate tip (1 RON × remaining qty); clear entirely if no orders left.
   const remaining = await getOrders(date);
-  const stillHasOrders = remaining.some((o) => o.nickname === nickname);
-  if (!stillHasOrders) {
+  const nickOrders = remaining.filter((o) => o.nickname === nickname);
+  if (nickOrders.length === 0) {
     await deleteTip(date, nickname);
+  } else {
+    const newTip = nickOrders.reduce((s, o) => s + o.qty, 0);
+    await setTip(date, nickname, newTip);
   }
 
   return new NextResponse(null, { status: 204 });

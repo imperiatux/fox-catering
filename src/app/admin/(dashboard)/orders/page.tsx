@@ -75,7 +75,7 @@ export default function AdminOrdersPage() {
     setDeletingId(id);
     try {
       await fetch(`/api/admin/orders/${id}`, { method: "DELETE" });
-      setOrders((prev) => prev.filter((o) => o.id !== id));
+      await fetchOrders();
     } finally {
       setDeletingId(null);
     }

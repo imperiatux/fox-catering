@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { Order, MenuType } from "@/types";
 
@@ -10,10 +10,36 @@ const NICKNAME_KEY = "fox_catering_nickname";
 // Types
 // ---------------------------------------------------------------------------
 
+interface Prices {
+  priceNonVeg: number;
+  priceVeg: number;
+  priceSoupNonVeg: number;
+  priceSoupVeg: number;
+  priceMainNonVeg: number;
+  priceMainVeg: number;
+  priceCustom: number;
+}
+
 interface MenuStatus {
   photoUrl: string | null;
   isOpen: boolean;
   reason: string | null;
+  prices: Prices;
+}
+
+const ZERO_PRICES: Prices = {
+  priceNonVeg: 0, priceVeg: 0,
+  priceSoupNonVeg: 0, priceSoupVeg: 0,
+  priceMainNonVeg: 0, priceMainVeg: 0,
+  priceCustom: 0,
+};
+
+function orderPrice(order: Order, prices: Prices): number {
+  if (order.menuType === "non-veg")   return prices.priceNonVeg     * order.qty;
+  if (order.menuType === "veg")       return prices.priceVeg         * order.qty;
+  if (order.menuType === "soup-only") return (order.soup === "veg" ? prices.priceSoupVeg : prices.priceSoupNonVeg) * order.qty;
+  if (order.menuType === "main-only") return (order.main === "veg" ? prices.priceMainVeg : prices.priceMainNonVeg) * order.qty;
+  return prices.priceCustom * order.qty; // custom
 }
 
 type CourseType = "non-veg" | "veg" | "none";
@@ -376,9 +402,13 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Tip — one per nickname per day; default 1 RON, loaded from server once nickname is known
-  const [tip, setTip] = useState<number>(1);
-  const [tipInput, setTipInput] = useState<string>("1"); // string for controlled input
+  // Tip — 1 RON per menu ordered; user can override. Driven directly from `tip` number state.
+  const [tip, setTip] = useState<number>(0);
+
+  /** Compute tip default from a list of orders: 1 RON × total qty. */
+  function defaultTipForOrders(orders: Order[]): number {
+    return orders.reduce((s, o) => s + o.qty, 0);
+  }
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -394,34 +424,40 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
     setNicknameReady(true);
   }, []);
 
-  const loadMyOrders = useCallback(async (nick: string) => {
-    if (!nick) return;
+  const loadMyOrders = useCallback(async (nick: string): Promise<Order[]> => {
+    if (!nick) return [];
     setOrdersLoading(true);
     try {
       const res = await fetch(`/api/orders?nickname=${encodeURIComponent(nick)}`);
-      if (res.ok) setMyOrders(await res.json());
+      if (res.ok) {
+        const orders: Order[] = await res.json();
+        setMyOrders(orders);
+        return orders;
+      }
     } finally {
       setOrdersLoading(false);
     }
+    return [];
   }, []);
 
   useEffect(() => {
     if (nicknameReady && nickname) loadMyOrders(nickname);
   }, [nicknameReady, nickname, loadMyOrders]);
 
-  // Load today's tip for this nickname (falls back to default 1 if not yet set)
+  // Keep tip in sync with projected default (1 RON × total qty) whenever
+  // pending items or confirmed orders change. Only auto-updates when the
+  // current tip exactly matches the previous auto-default — manual overrides
+  // are preserved by setting prevProjectedQtyRef to -1 on manual input.
+  const prevProjectedQtyRef = useRef<number>(0);
   useEffect(() => {
-    if (!nickname) return;
-    fetch(`/api/tip?nickname=${encodeURIComponent(nickname)}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data?.tip !== undefined) {
-          setTip(data.tip);
-          setTipInput(String(data.tip));
-        }
-      })
-      .catch(() => {});
-  }, [nickname]);
+    const confirmedQty = myOrders.reduce((s, o) => s + o.qty, 0);
+    const pendingQty   = pendingItems.reduce((s, i) => s + i.qty, 0);
+    const projected    = confirmedQty + pendingQty;
+    if (tip === prevProjectedQtyRef.current) {
+      setTip(projected);
+    }
+    prevProjectedQtyRef.current = projected;
+  }, [myOrders, pendingItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveTip(amount: number) {
     if (!nickname) return;
@@ -477,9 +513,12 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
           return;
         }
       }
-      await saveTip(tip);
       setPendingItems([]);
-      await loadMyOrders(nickname);
+      const updatedOrders = await loadMyOrders(nickname);
+      const newTip = defaultTipForOrders(updatedOrders);
+      setTip(newTip);
+      prevProjectedQtyRef.current = newTip;
+      await saveTip(newTip);
       setToast(t("order_placed"));
     } finally {
       setSubmitting(false);
@@ -510,7 +549,11 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         return;
       }
       setEditingOrder(null);
-      await loadMyOrders(nickname);
+      const updatedOrders = await loadMyOrders(nickname);
+      const newTip = defaultTipForOrders(updatedOrders);
+      setTip(newTip);
+      prevProjectedQtyRef.current = newTip;
+      await saveTip(newTip);
       setToast(t("order_saved"));
     } finally {
       setSubmitting(false);
@@ -530,15 +573,11 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
         setError(tErr("generic"));
         return;
       }
-      await loadMyOrders(nickname);
-      // If no orders remain, reset the tip UI to the default so the next order starts fresh.
-      setMyOrders((prev) => {
-        if (prev.length === 0) {
-          setTip(1);
-          setTipInput("1");
-        }
-        return prev;
-      });
+      const updatedOrders = await loadMyOrders(nickname);
+      const newTip = defaultTipForOrders(updatedOrders); // 0 when no orders remain
+      setTip(newTip);
+      prevProjectedQtyRef.current = newTip;
+      await saveTip(newTip);
       setToast(t("order_deleted"));
     } finally {
       setSubmitting(false);
@@ -726,7 +765,8 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                   }
                 />
               ))}
-              {/* Tip selector */}
+              {/* Tip selector — default is 1 RON × (confirmed + pending) qty */}
+              {/* Tip selector — default is 1 RON × (confirmed + pending) qty */}
               <div className="mt-3 pt-3 border-t border-brand-100 flex items-center justify-between gap-3">
                 <label htmlFor="tip-input" className="text-sm text-brand-800 font-medium">
                   {t("tip_label")}
@@ -737,13 +777,12 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
                     type="number"
                     min={0}
                     step={0.5}
-                    placeholder="0"
-                    value={tip === 0 ? "" : tipInput}
+                    value={tip}
                     onChange={(e) => {
-                      setTipInput(e.target.value);
                       const parsed = e.target.value === "" ? 0 : Math.max(0, Number(e.target.value));
                       setTip(parsed);
-                      saveTip(parsed);
+                      // Mark as manually overridden so the auto-sync doesn't clobber it.
+                      prevProjectedQtyRef.current = -1;
                     }}
                     className="w-20 rounded-lg border border-brand-300 bg-white px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                   />
@@ -806,6 +845,20 @@ export default function OrderPage({ initialMenu }: { initialMenu: MenuStatus }) 
               <span className="font-semibold text-yellow-600">{tip} RON</span>
             </div>
           )}
+          {!ordersLoading && myOrders.length > 0 && (() => {
+            const prices = menu.prices ?? ZERO_PRICES;
+            const hasPrices = Object.values(prices).some((v) => v > 0);
+            if (!hasPrices) return null;
+            const menuSubtotal = myOrders.reduce((sum, o) => sum + orderPrice(o, prices), 0);
+            const total = menuSubtotal + tip;
+            if (total === 0) return null;
+            return (
+              <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between text-sm font-semibold">
+                <span className="text-gray-800">{t("order_total")}</span>
+                <span className="text-brand-600">{total.toFixed(2)} RON</span>
+              </div>
+            );
+          })()}
         </section>
       )}
 

@@ -21,9 +21,19 @@ export async function GET() {
 
   const photoUrl = filename ? `/uploads/${filename}` : null;
 
+  const prices = {
+    priceNonVeg:     settings.priceNonVeg,
+    priceVeg:        settings.priceVeg,
+    priceSoupNonVeg: settings.priceSoupNonVeg,
+    priceSoupVeg:    settings.priceSoupVeg,
+    priceMainNonVeg: settings.priceMainNonVeg,
+    priceMainVeg:    settings.priceMainVeg,
+    priceCustom:     settings.priceCustom,
+  };
+
   // No photo uploaded yet — ordering is not possible.
   if (!filename) {
-    return NextResponse.json({ photoUrl: null, isOpen: false, reason: "no_photo" });
+    return NextResponse.json({ photoUrl: null, isOpen: false, reason: "no_photo", prices });
   }
 
   // ISO weekday: getDay() returns 0 (Sun) … 6 (Sat); convert to 1 (Mon) … 7 (Sun)
@@ -32,16 +42,16 @@ export async function GET() {
   const isActiveDay = settings.activeDays.includes(isoWeekday);
 
   if (!isActiveDay) {
-    return NextResponse.json({ photoUrl, isOpen: false, reason: "not_active_day" });
+    return NextResponse.json({ photoUrl, isOpen: false, reason: "not_active_day", prices });
   }
 
   if (settings.cutoffEnabled) {
     const cutoffMinutes = settings.cutoffHour * 60 + settings.cutoffMinute;
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     if (nowMinutes >= cutoffMinutes) {
-      return NextResponse.json({ photoUrl, isOpen: false, reason: "order_closed" });
+      return NextResponse.json({ photoUrl, isOpen: false, reason: "order_closed", prices });
     }
   }
 
-  return NextResponse.json({ photoUrl, isOpen: true, reason: null });
+  return NextResponse.json({ photoUrl, isOpen: true, reason: null, prices });
 }

@@ -48,8 +48,9 @@
     "mix_courses": "sau combină cursuri individual",
     "select_course_hint": "Selectează cel puțin un fel de mâncare.",
     "tip": "Bacșiș",
-    "tip_label": "Adaugă bacșiș (RON)",
+    "tip_label": "Adaugă bacșiș (RON) (total)",
     "tip_applied": "Bacșiș inclus",
+    "order_total": "Total",
     "order_placed": "Comandă plasată!",
     "order_saved": "Comandă actualizată!",
     "order_deleted": "Comandă ștearsă."
